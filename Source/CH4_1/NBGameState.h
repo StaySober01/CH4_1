@@ -10,6 +10,10 @@ class CH4_1_API ANBGameState : public AGameStateBase
 {
 	GENERATED_BODY()
 
+public:
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastReceiveMessage(const FString& Message);
+
 protected:
 	virtual void BeginPlay() override;
 };

@@ -1,0 +1,67 @@
+#include "UI/NBChatWidget.h"
+
+#include "Components/Button.h"
+#include "Components/EditableTextBox.h"
+#include "Components/ScrollBox.h"
+#include "Components/TextBlock.h"
+#include "NBPlayerController.h"
+#include "NBUtility.h"
+
+void UNBChatWidget::NativeOnInitialized()
+{
+	Super::NativeOnInitialized();
+
+	NB_RETURN_IF_FALSE(ChatInput && SendButton && ChatScrollBox && ChatHistoryText,
+		"Check WBP_NBChat BindWidget names and types.");
+	// 초기화 시 한 번만 등록하여 재표시 시 이벤트 중복 연결을 방지한다.
+	SendButton->OnClicked.AddDynamic(this, &UNBChatWidget::HandleSendClicked);
+	ChatInput->OnTextCommitted.AddDynamic(this, &UNBChatWidget::HandleTextCommitted);
+	ChatInput->SetClearKeyboardFocusOnCommit(false);
+	ChatHistoryText->SetText(FText::GetEmpty());
+}
+
+void UNBChatWidget::HandleSendClicked()
+{
+	SubmitChat();
+}
+
+void UNBChatWidget::HandleTextCommitted(const FText& Text, ETextCommit::Type CommitMethod)
+{
+	// 버튼 클릭으로 포커스가 옮겨갈 때는 보내지 않고 Enter만 처리한다.
+	if (CommitMethod == ETextCommit::OnEnter)
+	{
+		SubmitChat();
+	}
+}
+
+void UNBChatWidget::SubmitChat()
+{
+	ANBPlayerController* Player = GetOwningPlayer<ANBPlayerController>();
+	NB_RETURN_IF_FALSE(IsValid(Player) && ChatInput, "Chat input or owning PC is missing.");
+	const FString Message = ChatInput->GetText().ToString();
+	// 전송할 문자열을 복사한 뒤 입력창을 비운다.
+	ChatInput->SetText(FText::GetEmpty());
+	Player->SendChat(Message);
+	FocusChatInput();
+}
+
+void UNBChatWidget::FocusChatInput()
+{
+	if (ChatInput && GetOwningPlayer())
+	{
+		ChatInput->SetUserFocus(GetOwningPlayer());
+	}
+}
+
+void UNBChatWidget::AppendMessage(const FString& Message)
+{
+	NB_RETURN_IF_FALSE(ChatHistoryText && ChatScrollBox, "Chat history widgets are missing.");
+	// 로컬 표시를 최근 100건으로 제한한다. 과거 채팅은 복제하지 않는다.
+	if (MessageHistory.Num() >= 100)
+	{
+		MessageHistory.RemoveAt(0);
+	}
+	MessageHistory.Add(Message);
+	ChatHistoryText->SetText(FText::FromString(FString::Join(MessageHistory, TEXT("\n"))));
+	ChatScrollBox->ScrollToEnd();
+}

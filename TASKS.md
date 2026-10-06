@@ -6,6 +6,7 @@
 
 - `[x]`는 실제 수행 및 확인한 작업만 의미한다. 계획이나 예상 성공은 체크하지 않는다.
 - 현재 상태: M0 완료. M1 코드/맵 연결 및 2인 PIE 클래스 생성 범위 확인 완료(사용자 제공 로그). 정식 Editor Target 빌드 결과는 별도 전달되지 않아 확인 대기로 남긴다.
+- M2 완료: 사용자가 'M2 검증 완료. 문제 없음'으로 빌드/위젯/PIE 검증 완료를 보고했다. 다음 단계는 M3이며 아직 미착수다. M1 당시의 별도 빌드 로그는 미수집 상태로 유지한다.
 - M1~M8 필수 기반/기능, M9~M10 도전, M11 제출 정리. 한 번에 하나의 milestone만 진행한다.
 - 파일 경로 표에서 `.h/.cpp`는 두 파일을 뜻하고, C++ 경로는 `Source/CH4_1/` 기준이다. 에셋과 설정은 루트 기준이다.
 - 각 milestone 종료 시 아래 검증 기록 양식을 채운다. 실행 검증이 남으면 완료 처리하지 않는다.
@@ -52,7 +53,7 @@
 - [ ] M1-3 Editor Target 빌드 — 사용자 빌드 확인 대기
 - [x] M1-4 2 Player PIE에서 클래스 생성 범위 검증 — 사용자 제공 Listen Server/Client 로그로 확인
 
-## M2. 기본 멀티플레이 채팅 — 미착수
+## M2. 기본 멀티플레이 채팅 — 완료(사용자 검증)
 
 - 목표: 소유 클라이언트 → 서버 → 모든 플레이어 메시지 흐름 확립.
 - 수정 파일: NBPlayerController.h/.cpp, NBGameMode.h/.cpp, NBGameState.h/.cpp, UI/NBChatWidget.h/.cpp, CH4_1.Build.cs, Content/UI/WBP_NBChat.uasset, Content/Blueprints/BP_NBPlayerController.uasset.
@@ -61,11 +62,12 @@
 - RPC/Replication: ServerSendChat, GS MulticastReceiveMessage; 잘못된 입력은 ClientShowInputError. 모두 낮은 빈도 Reliable. 채팅 이력 복제 없음.
 - 완료 조건: 양쪽이 각각 보낸 메시지가 양쪽에 한 번씩 표시, 발신자는 서버 기준.
 - 검증: C + P(호스트→클라이언트, 클라이언트→호스트, 빈 입력·과도한 길이) + H(Enter 제출/포커스/중복 표시).
-- [ ] M2-1 UMG 의존성과 위젯 입력 연결
-- [ ] M2-2 소유 PC의 Client → Server RPC
-- [ ] M2-3 서버에서 Player 1 / Player 2 이름 부여 및 발신자·문자열 처리
-- [ ] M2-4 GameState Multicast → 로컬 채팅 표시
-- [ ] M2-5 빌드 및 2 Player PIE 검증 — 실행은 수동 검증 필요
+- [x] M2-1a UMG/SlateCore 의존성 및 위젯 입력 C++ 연결 작성
+- [x] M2-1b 사용자 WBP_NBChat 생성 및 BP_NBPlayerController의 ChatWidgetClass 연결 — 사용자 검증 완료 보고
+- [x] M2-2 소유 PC의 Client → Server RPC 코드 작성
+- [x] M2-3 서버에서 Player 1 / Player 2 이름 부여 및 발신자·문자열 처리 코드 작성
+- [x] M2-4 GameState Multicast → 로컬 채팅 표시 코드 작성
+- [x] M2-5 빌드 및 2 Player PIE 검증 — 사용자 검증 완료 보고, 문제 없음
 
 ## M3. 정답 생성·입력 검증·판정 — 미착수
 
@@ -237,3 +239,29 @@ Editor 수동 확인: 확인 항목 / 확인자 / 결과 또는 '수동 검증 �
 - 서버 PostLogin 두 건에서 BP_NBPlayerController 적용 확인. L_NumberBaseball 맵과 BP_NBGameMode 적용도 로그로 확인.
 - Content의 맵/BP 두 개와 Config의 시작 맵/기본 GameMode 설정을 읽기 전용으로 확인했다. 사용자 에셋/설정은 수정하지 않았다.
 - PIE 실행 및 클래스 배치는 검증 완료. 정확한 프로세스 설정과 정식 빌드 명령/성공 결과는 로그만으로 확정하지 않으며 M1-3은 확인 대기로 유지한다.
+
+### M2 코드 작업 기록
+
+- PC: 로컬 위젯 생성, ServerSendChat, ClientShowInputError, UI 생성 전 메시지 임시 보관(최대 100건).
+- GM: PostLogin에서 빈 Player 번호 부여, 서버 전용 이름 표와 PlayerState 이름 설정, Logout 정리. ProcessChatMessage가 원문 200자 제한/공백뿐인 입력/제어 문자를 검사하고 서버 이름으로 메시지를 만든다.
+- GS: Reliable NetMulticast를 수신한 월드의 로컬 PC에만 전달. 서버의 원격 PC에 재전송하거나 발신 UI에서 먼저 표시하지 않아 중복 표시를 피한다.
+- UI: BindWidget 네 개, 초기화 시 한 번만 이벤트 연결, Enter 또는 버튼 제출, 최근 100건 표시 및 스크롤. 숫자 제출 UI는 M3에 남겨둔다.
+- 정적 검토: UE 5.6의 UMG 이벤트 시그니처·초기화 순서·포커스 API·GM GetGameState 확인. RPC 선언과 구현, BindWidget 이름, 서버/로컬 분기 확인.
+- 빌드/실행: 수행하지 않음. 사용자 빌드 확인 대기 / 에디터·PIE 수동 검증 필요.
+- 에디터 절차: Docs/M2_EDITOR_CHECKLIST.md. 사용자 기존 에셋·Config와 .github는 수정하지 않음.
+- 설명할 질문: 왜 Widget에서 직접 Server RPC를 호출하지 않는가? 왜 Multicast는 GS에 있는가? 왜 발신자 이름을 클라이언트로부터 받지 않는가?
+- 완료 여부: M2 코드 작성만 완료, M2 전체는 미완료.
+
+### M2 include 경로 오류 수정
+
+- 사용자 빌드에서 UI/NBChatWidget.h를 찾지 못하는 오류 보고.
+- 생성된 CH4_1.Shared.rsp에는 Source 경로만 있고 Source/CH4_1 모듈 루트 검색 경로가 없는 것을 확인했다. 하위 UI 폴더의 .cpp에서 모듈 루트 기준 include를 사용한 것이 원인이다.
+- CH4_1.Build.cs에 PrivateIncludePaths.Add(ModuleDirectory)를 추가했다. 기존 파일 구조를 유지하며 모듈 내부 컴파일에 필요한 헤더 검색 기준을 명시한다.
+- 사용자 빌드 재확인 대기. Codex는 빌드하지 않았다.
+
+### M2 사용자 검증 완료
+
+- 사용자 보고: 'M2 검증 완료. 문제 없음'. 이를 근거로 M2 빌드·위젯 연결·PIE 검증 완료를 기록한다.
+- Content/UI/WBP_NBChat.uasset 존재와 BP_NBPlayerController 변경 상태를 확인했다. 에셋은 수정하지 않았다.
+- 개별 테스트 로그/스크린샷은 별도 수집하지 않았으며 Codex가 직접 빌드 또는 PIE를 실행한 것은 아니다.
+- M2 완료. 다음 M3는 정답 생성·입력 검증·S/B/OUT 판정이며 아직 시작하지 않았다.

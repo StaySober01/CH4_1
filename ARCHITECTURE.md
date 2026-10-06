@@ -1,6 +1,6 @@
 # 숫자 야구 아키텍처
 
-작성 기준: 2026-10-06. M1 클래스 골격과 진단 유틸리티를 작성하고 사용자 제공 로그로 2인 PIE 클래스 배치를 확인했다. 정식 빌드 결과는 별도 확인 대기다. 채팅과 숫자 야구 규칙은 아직 미구현이다.
+작성 기준: 2026-10-06. **현재 확인한 구현**과 **확정한 구현 계획**을 구분한다. M1의 클래스 배치는 사용자 2인 PIE 로그로 확인했다. M2 채팅은 사용자 보고에 따라 빌드/위젯 연결/실행 검증 완료(문제 없음)로 기록한다. 숫자 야구 규칙은 미구현이다.
 
 ## 확정 요구사항 (2026-10-06 사용자 승인)
 
@@ -30,7 +30,8 @@
 | --- | --- |
 | 엔진/모듈 | CH4_1.uproject: EngineAssociation 5.6, Runtime 모듈 CH4_1 |
 | C++ | 기본 모듈에 LogNB 선언/정의 추가. NBGameMode/PlayerController/PlayerState/GameState 골격과 생성 로그 작성 |
-| 빌드 | CH4_1.Build.cs: Core, CoreUObject, Engine, InputCore, EnhancedInput. UMG 의존성은 아직 없음 |
+| 빌드 | CH4_1.Build.cs: Core, CoreUObject, Engine, InputCore, EnhancedInput, UMG, SlateCore |
+| 내부 include 경로 | PrivateIncludePaths에 ModuleDirectory 등록. UI 하위 폴더에서도 모듈 루트 기준 헤더 참조 |
 | Target | Game, Editor 두 Target. 별도 Server Target 없음 |
 | 콘텐츠 | 사용자 생성 L_NumberBaseball.umap, BP_NBGameMode.uasset, BP_NBPlayerController.uasset 확인 |
 | 시작 맵 | GameDefaultMap 및 EditorStartupMap이 /Game/Maps/L_NumberBaseball.L_NumberBaseball로 설정됨 |
@@ -40,9 +41,9 @@
 | 환경 | 사용자 로그로 Listen Server + Client 실행 확인. 정식 빌드 결과 및 프로세스 설정은 별도 미확인 |
 | 저장소 | 분석 시작 시 git status --short 출력 없음 |
 
-Saved/Intermediate/Binaries 파일은 실행 성공의 증거로 삼지 않는다. 사용자가 설정한 맵/BP의 클래스 적용은 제공된 PIE 로그로 확인했다. M1은 클래스 골격 및 로그만 포함하며 게임 RPC/복제 프로퍼티는 없다.
+Saved/Intermediate/Binaries 등의 생성 폴더는 실행 성공의 증거로 사용하지 않는다. 사용자가 M1 맵/BP 및 Config를 설정했고 실제 클래스 적용을 PIE 로그로 확인했다. M2에서 PC Server/Client RPC와 GS NetMulticast를 추가했다. 이름은 기존 PlayerState SetPlayerName 경로를 이용하며 새 게임 상태 복제 프로퍼티는 아직 없다.
 
-## 2. 최종 목표 클래스 구조 (현재 네 Actor 클래스 골격만 작성)
+## 2. 최종 목표 클래스 구조 (현재 M2 채팅 코드까지 작성)
 
 현재 공통 진단 도구는 `NBUtility.h`다. LogNB에 함수명/줄번호를 포함하는 로그와 조건 실패 시 조기 반환 매크로를 제공한다. 화면 출력은 기본적으로 꺼져 있다. 순수 C++ 헤더로 서버/클라이언트 호출 위치에서 실행하며, 네트워크 전송이나 게임 판정을 담당하지 않는다. 사용법은 `Docs/NB_UTILITY.md`에 기록했다.
 
@@ -65,6 +66,20 @@ Saved/Intermediate/Binaries 파일은 실행 성공의 증거로 삼지 않는�
 
 ## 3. 데이터 소유와 수정 권한
 
+### M2에서 작성한 실제 채팅 경로
+
+`UNBChatWidget::SubmitChat` → 로컬 `ANBPlayerController::SendChat` → `ServerSendChat` → 서버 `ANBGameMode::ProcessChatMessage` → `ANBGameState::MulticastReceiveMessage` → 각 월드의 로컬 PC `ReceiveChatMessage` → 위젯 `AppendMessage`.
+
+- GM은 PostLogin에서 빈 Player 번호를 정하고 서버 전용 ChatPlayerNames 표에 저장하며 PlayerState에도 표시 이름을 설정한다. 채팅 이름은 서버 표에서 가져오므로 클라이언트가 제출한 이름/ID를 사용하지 않는다. Logout 시 제거한다. M5 정원 제한 전에는 테스트상 Player 3 이상도 배정할 수 있다.
+- 일반 채팅의 원문은 FString.Len() 기준 200 이하로 제한한다(ASCII/한글 기본 문자 기준 200자, 일부 문자는 여러 코드 단위). 앞뒤 공백은 제거하고, 공백뿐인 내용과 제어 문자는 거절한다. 숫자 입력 규칙과는 별개다.
+- 잘못된 입력은 ClientShowInputError로 소유자에게만 안내한다. 모든 RPC는 낮은 빈도의 Reliable이다. 채팅 속도 제한이나 서버 채팅 이력 저장은 현재 구현하지 않는다.
+- 위젯은 로컬 PC BeginPlay에서 생성한다. 수신 메시지가 PC BeginPlay보다 먼저 오면 최대 100건을 임시 보관하고 생성 후 비운다. 접속 이전 이력 재생이나 아직 PC가 없는 시점의 메시지 보장은 하지 않는다.
+- GS는 자신의 World 내 PC 중 IsLocalController인 대상에게만 표시를 요청한다. 호스트 또한 이 경로로 한 번 표시한다. 위젯에서 제출 시 즉시 메시지를 추가하지 않는다.
+- NativeOnInitialized에서 버튼/Enter 이벤트를 한 번 연결한다. 포커스 이동으로 발생하는 OnTextCommitted는 제출하지 않는다. 로컬 UI 이력은 최근 100건을 표시한다.
+- 필수 BindWidget: ChatInput(EditableTextBox), SendButton(Button), ChatScrollBox(ScrollBox), ChatHistoryText(TextBlock). 사용자 WBP_NBChat 및 BP의 ChatWidgetClass 설정이 필요하다.
+- M2의 UIOnly 입력 모드는 채팅에 키보드/마우스를 사용하기 위한 설정이다. 서버의 원격 PC나 Dedicated Server에서는 위젯을 만들지 않는다.
+
+### 최종 목표 데이터 구분
 
 여기서 데이터 보관과 네트워크 owning connection을 구분한다. 클라이언트가 PlayerController를 소유한다는 것은 요청 RPC의 경로를 가진다는 뜻이며, 서버 게임 상태를 임의로 수정할 권한이 있다는 뜻이 아니다.
 
