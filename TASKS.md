@@ -6,7 +6,7 @@
 
 - `[x]`는 실제 수행 및 확인한 작업만 의미한다. 계획이나 예상 성공은 체크하지 않는다.
 - 현재 상태: M0 완료. M1 코드/맵 연결 및 2인 PIE 클래스 생성 범위 확인 완료(사용자 제공 로그). 정식 Editor Target 빌드 결과는 별도 전달되지 않아 확인 대기로 남긴다.
-- M2 완료: 사용자가 'M2 검증 완료. 문제 없음'으로 빌드/위젯/PIE 검증 완료를 보고했다. 다음 단계는 M3이며 아직 미착수다. M1 당시의 별도 빌드 로그는 미수집 상태로 유지한다.
+- M2·M3 완료: 사용자 빌드/규칙 테스트/위젯/PIE 검증 완료 보고. 다음 단계 M4는 미착수. M1 당시의 별도 빌드 로그는 미수집 상태로 유지한다.
 - M1~M8 필수 기반/기능, M9~M10 도전, M11 제출 정리. 한 번에 하나의 milestone만 진행한다.
 - 파일 경로 표에서 `.h/.cpp`는 두 파일을 뜻하고, C++ 경로는 `Source/CH4_1/` 기준이다. 에셋과 설정은 루트 기준이다.
 - 각 milestone 종료 시 아래 검증 기록 양식을 채운다. 실행 검증이 남으면 완료 처리하지 않는다.
@@ -69,7 +69,7 @@
 - [x] M2-4 GameState Multicast → 로컬 채팅 표시 코드 작성
 - [x] M2-5 빌드 및 2 Player PIE 검증 — 사용자 검증 완료 보고, 문제 없음
 
-## M3. 정답 생성·입력 검증·판정 — 미착수
+## M3. 정답 생성·입력 검증·판정 — 완료(사용자 검증)
 
 - 목표: 서버에서만 정답을 만들고 유효한 숫자의 S/B/OUT을 계산.
 - 수정 파일: NBGameMode.h/.cpp, NBPlayerController.h/.cpp, NBNumberBaseballLibrary.h/.cpp, NBGameTypes.h, UI/NBChatWidget.h/.cpp, Content/UI/WBP_NBChat.uasset, Tests/NBNumberBaseballTests.cpp.
@@ -78,13 +78,15 @@
 - RPC/Replication: ServerSubmitGuess, ClientShowInputError, 기존 Multicast 메시지. 정답 복제 금지.
 - 완료 조건: 유효 입력의 정확한 판정과 잘못된 입력 안내. 이 단계에서는 횟수 제한·승패 미구현.
 - 검증: C + L + P(같은 정답 기준 양쪽 결과) + H(채팅/숫자 UX).
-- [ ] M3-1 서버 GenerateRandomNumbers 및 개발 로그
-- [ ] M3-2 정확히 3자리·1~9·중복 금지 검사
-- [ ] M3-3 CheckAnswer 및 순수 계산 라이브러리
-- [ ] M3-4 채팅과 별도 숫자 입력창, 제출 RPC와 개인 오류 안내 연결
-- [ ] M3-5 정답 386: 127→OUT, 167→0S1B, 123→0S1B, 368→1S2B, 638→0S3B, 386→3S0B 테스트
-- [ ] M3-6 빈 값/12/1234/112/012/abc/1a3/공백/전각 숫자 거절, 반복 생성 시 범위·중복 없음 확인
-- [ ] M3-7 빌드·계산 테스트·2인 PIE — 실행은 수동 검증 필요
+- [x] M3-1 서버 GenerateRandomNumbers 및 개발 로그 코드 작성
+- [x] M3-2 정확히 3자리·1~9·중복 금지 검사 코드 작성
+- [x] M3-3 CheckAnswer 및 순수 계산 라이브러리 코드 작성
+- [x] M3-4a 별도 숫자 입력창용 C++ 바인딩, 제출 RPC와 개인 오류 안내 연결
+- [x] M3-4b 사용자 WBP_NBChat에 GuessInput/GuessButton 추가 및 연결 확인
+- [x] M3-5a 입력 오류·고정 판정 사례·504개 유효 숫자 자기 비교 Automation Test 코드 작성(미실행)
+- [x] M3-5 정답 386: 127→OUT, 167→0S1B, 123→0S1B, 368→1S2B, 638→0S3B, 386→3S0B 테스트 — 사용자 검증 완료 보고
+- [x] M3-6 빈 값/12/1234/112/012/abc/1a3/공백/전각 숫자 거절, 반복 생성 시 범위·중복 없음 확인 — 사용자 검증 완료 보고
+- [x] M3-7 빌드·계산 테스트·2인 PIE — 사용자 검증 완료 보고
 
 ## M4. PlayerState 시도 횟수 — 미착수
 
@@ -265,3 +267,21 @@ Editor 수동 확인: 확인 항목 / 확인자 / 결과 또는 '수동 검증 �
 - Content/UI/WBP_NBChat.uasset 존재와 BP_NBPlayerController 변경 상태를 확인했다. 에셋은 수정하지 않았다.
 - 개별 테스트 로그/스크린샷은 별도 수집하지 않았으며 Codex가 직접 빌드 또는 PIE를 실행한 것은 아니다.
 - M2 완료. 다음 M3는 정답 생성·입력 검증·S/B/OUT 판정이며 아직 시작하지 않았다.
+
+### M3 코드 작업 기록
+
+- 사용자 다음 단계 요청으로 착수. GameMode BeginPlay에서 1~9 후보 중 3개를 뽑고 제거하여 중복 없는 정답을 생성한다. 개발 서버 Output Log에만 정답을 남기며 Shipping에서는 해당 로그를 제외한다.
+- UNBNumberBaseballLibrary 하나에 ValidateInput/EvaluateGuess를 작성했다. FNBGuessResult는 S/B를 보관하고 OUT 또는 nSnB 문자열을 만든다. 잘못된 인수는 false이며 OUT과 구분한다.
+- UI GuessInput/GuessButton → 소유 PC ServerSubmitGuess → GM ProcessGuess/CheckAnswer → 기존 GS MulticastReceiveMessage 경로. 오류는 기존 ClientShowInputError를 사용한다.
+- 정답은 private FString이며 RPC/Replication/위젯에 전달하지 않는다. 클라이언트에서 정답/판정 결과를 보내지 않는다.
+- Tests/NBNumberBaseballTests.cpp 작성: 입력 오류, 오류/결과 초기화, 386 기준 사례, 유효 504개 숫자의 자기 비교 3S0B. 실행하지 않았으므로 테스트 통과로 기록하지 않는다.
+- 정적 검토: RPC 선언/구현, generated.h 순서, BindWidget 이름/타입, 정답 참조 범위, diff 공백 검사. 빌드·자동화 테스트·PIE는 사용자 담당이며 확인 대기.
+- M3에서는 PIE 시작 시 한 번 생성, 횟수 제한 없이 판정만 수행한다. 3S도 게임 종료/리셋하지 않는다. 2인 자동 시작·라운드 식별자는 M5, 횟수는 M4, 리셋은 M7에서 구현한다.
+- 사용자 절차: Docs/M3_EDITOR_CHECKLIST.md. 기존 에셋/Config는 수정하지 않았다.
+- 설명할 질문: 순수 계산 라이브러리와 서버 권한은 어떻게 다른가? 입력 오류를 왜 OUT과 구분하는가? 뽑은 후보를 제거하면 왜 중복이 생기지 않는가?
+
+### M3 사용자 검증 완료
+
+- 사용자 보고: '모두 검증 완료'. M3 안내 범위의 빌드·규칙 테스트·위젯 연결·2인 PIE 검증을 완료한 것으로 기록한다.
+- 개별 실행 로그는 별도 수집하지 않았으며 Codex가 직접 실행한 결과가 아니다. 위 코드 작성 시점의 대기 기록은 이 사용자 확인으로 해소한다.
+- M3 완료. 다음 M4는 PlayerState 시도 횟수 관리이며 아직 착수하지 않았다.

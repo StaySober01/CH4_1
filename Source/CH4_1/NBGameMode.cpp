@@ -5,6 +5,7 @@
 #include "NBGameState.h"
 #include "NBPlayerController.h"
 #include "NBPlayerState.h"
+#include "NBNumberBaseballLibrary.h"
 
 ANBGameMode::ANBGameMode()
 {
@@ -17,6 +18,7 @@ ANBGameMode::ANBGameMode()
 void ANBGameMode::BeginPlay()
 {
 	Super::BeginPlay();
+	GenerateRandomNumbers();
 
 	NB_LOG("World=%s Actor=%s NetMode=%d Authority=%d",
 		*GetNameSafe(GetWorld()), *GetName(), static_cast<int32>(GetNetMode()), HasAuthority());
@@ -94,4 +96,59 @@ void ANBGameMode::ProcessChatMessage(ANBPlayerController* Sender, const FString&
 	const FString DisplayMessage = FString::Printf(TEXT("%s: %s"), **SenderName, *TrimmedMessage);
 	NB_LOG("Accepted chat: Sender=%s Length=%d", **SenderName, TrimmedMessage.Len());
 	NBState->MulticastReceiveMessage(DisplayMessage);
+}
+
+void ANBGameMode::GenerateRandomNumbers()
+{
+	NB_RETURN_IF_FALSE(HasAuthority(), "Only the server can generate the answer.");
+	TArray<int32> Candidates = { 1, 2, 3, 4, 5, 6, 7, 8, 9 };
+	SecretAnswer.Reset();
+	for (int32 Index = 0; Index < 3; ++Index)
+	{
+		const int32 SelectedIndex = FMath::RandRange(0, Candidates.Num() - 1);
+		SecretAnswer.AppendChar(static_cast<TCHAR>(TEXT('0') + Candidates[SelectedIndex]));
+		// 뽑은 숫자를 후보에서 제거하므로 중복 재추첨 루프가 필요 없다.
+		Candidates.RemoveAtSwap(SelectedIndex);
+	}
+
+#if !UE_BUILD_SHIPPING
+	// NB_LOG의 선택적 화면 출력에도 비밀 정답을 노출하지 않는다.
+	UE_LOG(LogNB, Log, TEXT("[GenerateRandomNumbers] Server answer=%s"), *SecretAnswer);
+#endif
+}
+
+bool ANBGameMode::CheckAnswer(const FString& Input, FNBGuessResult& OutResult) const
+{
+	NB_RETURN_VALUE_IF_FALSE(HasAuthority(), false, "Only the server can check the answer.");
+	return UNBNumberBaseballLibrary::EvaluateGuess(SecretAnswer, Input, OutResult);
+}
+
+void ANBGameMode::ProcessGuess(ANBPlayerController* Sender, const FString& Input)
+{
+	NB_RETURN_IF_FALSE(HasAuthority(), "Guesses must be processed by the server.");
+	NB_RETURN_IF_FALSE(IsValid(Sender), "Guess sender is invalid.");
+	const FString* SenderName = ChatPlayerNames.Find(Sender);
+	NB_RETURN_IF_FALSE(SenderName, "Guess sender has not completed PostLogin.");
+
+	FString ErrorMessage;
+	if (!UNBNumberBaseballLibrary::ValidateInput(Input, ErrorMessage))
+	{
+		Sender->ClientShowInputError(ErrorMessage);
+		return;
+	}
+
+	FNBGuessResult Result;
+	if (!CheckAnswer(Input, Result))
+	{
+		NB_ERROR("The server answer is not ready or is invalid.");
+		Sender->ClientShowInputError(TEXT("게임 준비 중입니다. 잠시 후 다시 입력해주세요."));
+		return;
+	}
+
+	ANBGameState* NBState = GetGameState<ANBGameState>();
+	NB_RETURN_IF_FALSE(IsValid(NBState), "NBGameState is missing.");
+	const FString DisplayMessage = FString::Printf(TEXT("[숫자] %s: %s → %s"),
+		**SenderName, *Input, *Result.ToDisplayString());
+	NBState->MulticastReceiveMessage(DisplayMessage);
+	// M3는 판정까지만 수행한다. 횟수 소비와 3S 승리는 M4/M5에서 추가한다.
 }

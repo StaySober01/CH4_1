@@ -31,6 +31,20 @@ private:
 
 	void SubmitChat();
 
+	UFUNCTION()
+	void HandleGuessClicked();
+
+	UFUNCTION()
+	void HandleGuessCommitted(const FText& Text, ETextCommit::Type CommitMethod);
+
+	void SubmitGuess();
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UEditableTextBox> GuessInput;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UButton> GuessButton;
+
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UEditableTextBox> ChatInput;
 

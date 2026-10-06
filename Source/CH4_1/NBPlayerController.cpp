@@ -74,6 +74,21 @@ void ANBPlayerController::ReceiveChatMessage(const FString& Message)
 	}
 }
 
+void ANBPlayerController::SubmitGuess(const FString& Input)
+{
+	if (IsLocalController())
+	{
+		ServerSubmitGuess(Input);
+	}
+}
+
+void ANBPlayerController::ServerSubmitGuess_Implementation(const FString& Input)
+{
+	ANBGameMode* GameMode = GetWorld()->GetAuthGameMode<ANBGameMode>();
+	NB_RETURN_IF_FALSE(IsValid(GameMode), "NBGameMode is missing on the server.");
+	GameMode->ProcessGuess(this, Input);
+}
+
 void ANBPlayerController::ClientShowInputError_Implementation(const FString& Message)
 {
 	ReceiveChatMessage(FString::Printf(TEXT("[안내] %s"), *Message));

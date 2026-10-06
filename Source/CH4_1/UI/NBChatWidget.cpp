@@ -18,6 +18,11 @@ void UNBChatWidget::NativeOnInitialized()
 	ChatInput->OnTextCommitted.AddDynamic(this, &UNBChatWidget::HandleTextCommitted);
 	ChatInput->SetClearKeyboardFocusOnCommit(false);
 	ChatHistoryText->SetText(FText::GetEmpty());
+
+	NB_RETURN_IF_FALSE(GuessInput && GuessButton, "Add GuessInput and GuessButton to WBP_NBChat.");
+	GuessButton->OnClicked.AddDynamic(this, &UNBChatWidget::HandleGuessClicked);
+	GuessInput->OnTextCommitted.AddDynamic(this, &UNBChatWidget::HandleGuessCommitted);
+	GuessInput->SetClearKeyboardFocusOnCommit(false);
 }
 
 void UNBChatWidget::HandleSendClicked()
@@ -64,4 +69,28 @@ void UNBChatWidget::AppendMessage(const FString& Message)
 	MessageHistory.Add(Message);
 	ChatHistoryText->SetText(FText::FromString(FString::Join(MessageHistory, TEXT("\n"))));
 	ChatScrollBox->ScrollToEnd();
+}
+
+void UNBChatWidget::HandleGuessClicked()
+{
+	SubmitGuess();
+}
+
+void UNBChatWidget::HandleGuessCommitted(const FText& Text, ETextCommit::Type CommitMethod)
+{
+	if (CommitMethod == ETextCommit::OnEnter)
+	{
+		SubmitGuess();
+	}
+}
+
+void UNBChatWidget::SubmitGuess()
+{
+	ANBPlayerController* Player = GetOwningPlayer<ANBPlayerController>();
+	NB_RETURN_IF_FALSE(IsValid(Player) && GuessInput, "Guess input or owning PC is missing.");
+	const FString Input = GuessInput->GetText().ToString();
+	GuessInput->SetText(FText::GetEmpty());
+	// 문자열을 그대로 전달한다. 최종 검증/판정은 서버에서 수행한다.
+	Player->SubmitGuess(Input);
+	GuessInput->SetUserFocus(Player);
 }

@@ -14,6 +14,7 @@ class CH4_1_API ANBPlayerController : public APlayerController
 
 public:
 	void SendChat(const FString& Message);
+	void SubmitGuess(const FString& Input);
 	void ReceiveChatMessage(const FString& Message);
 
 	UFUNCTION(Client, Reliable)
@@ -25,6 +26,9 @@ protected:
 private:
 	UFUNCTION(Server, Reliable)
 	void ServerSendChat(const FString& Message);
+
+	UFUNCTION(Server, Reliable)
+	void ServerSubmitGuess(const FString& Input);
 
 	UPROPERTY(EditDefaultsOnly, Category = "NB|UI")
 	TSubclassOf<UNBChatWidget> ChatWidgetClass;
