@@ -3,6 +3,7 @@
 #include "NBUtility.h"
 #include "Engine/World.h"
 #include "NBGameMode.h"
+#include "NBGameState.h"
 #include "NBPlayerState.h"
 #include "UI/NBChatWidget.h"
 
@@ -26,7 +27,7 @@ void ANBPlayerController::BeginPlay()
 	ChatWidget->AddToPlayerScreen();
 	BindAttemptState();
 
-	// 채팅 전용 단계이므로 키보드/마우스를 UI로 전달한다.
+	// 채팅과 숫자 입력에 키보드/마우스를 사용한다.
 	FInputModeUIOnly InputMode;
 	SetInputMode(InputMode);
 	bShowMouseCursor = true;
@@ -37,6 +38,8 @@ void ANBPlayerController::BeginPlay()
 		ChatWidget->AppendMessage(Message);
 	}
 	PendingMessages.Reset();
+	// 상태 알림이 UI 생성보다 먼저 왔어도 현재 스냅샷에서 복원한다.
+	RefreshRoundUI();
 }
 
 void ANBPlayerController::SendChat(const FString& Message)
@@ -80,15 +83,57 @@ void ANBPlayerController::SubmitGuess(const FString& Input)
 {
 	if (IsLocalController())
 	{
-		ServerSubmitGuess(Input);
+		const ANBGameState* NBState = GetWorld()->GetGameState<ANBGameState>();
+		if (IsValid(NBState))
+		{
+			ServerSubmitGuess(Input, NBState->GetRoundState().RoundId);
+		}
 	}
 }
 
-void ANBPlayerController::ServerSubmitGuess_Implementation(const FString& Input)
+void ANBPlayerController::ServerSubmitGuess_Implementation(const FString& Input, int32 SubmittedRoundId)
 {
 	ANBGameMode* GameMode = GetWorld()->GetAuthGameMode<ANBGameMode>();
 	NB_RETURN_IF_FALSE(IsValid(GameMode), "NBGameMode is missing on the server.");
-	GameMode->ProcessGuess(this, Input);
+	GameMode->ProcessGuess(this, Input, SubmittedRoundId);
+}
+
+void ANBPlayerController::RefreshRoundUI()
+{
+	if (!IsLocalController() || !IsValid(ChatWidget))
+	{
+		return;
+	}
+	const ANBGameState* NBState = GetWorld()->GetGameState<ANBGameState>();
+	if (!IsValid(NBState))
+	{
+		ChatWidget->SetRoundPlaying(false);
+		return;
+	}
+	const FNBRoundState& Round = NBState->GetRoundState();
+	ChatWidget->SetRoundPlaying(Round.Phase == ENBRoundPhase::Playing);
+	// 초기 조회와 BeginPlay/OnRep 알림이 겹쳐도 같은 상태 문구를 반복하지 않는다.
+	if (LastDisplayedRoundId == Round.RoundId && LastDisplayedPhase == Round.Phase)
+	{
+		return;
+	}
+	LastDisplayedRoundId = Round.RoundId;
+	LastDisplayedPhase = Round.Phase;
+	FString StatusMessage;
+	switch (Round.Phase)
+	{
+	case ENBRoundPhase::Waiting:
+		StatusMessage = TEXT("두 플레이어의 접속을 기다립니다. 기존 라운드는 진행하지 않습니다.");
+		break;
+	case ENBRoundPhase::Playing:
+		StatusMessage = TEXT("라운드 시작! 각자 3번 안에 정답을 맞혀주세요.");
+		break;
+	case ENBRoundPhase::ShowingResult:
+		StatusMessage = Round.Result == ENBRoundResult::Win
+			? FString::Printf(TEXT("%s 승리!"), *Round.WinnerName) : TEXT("무승부!");
+		break;
+	}
+	ReceiveChatMessage(FString::Printf(TEXT("[R%d][라운드] %s"), Round.RoundId, *StatusMessage));
 }
 
 void ANBPlayerController::ClientShowInputError_Implementation(const FString& Message)

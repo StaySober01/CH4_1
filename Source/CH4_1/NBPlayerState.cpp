@@ -42,3 +42,11 @@ void ANBPlayerState::OnRep_Attempts()
 		static_cast<int32>(GetNetMode()), UsedAttempts, MaxAttempts);
 	OnAttemptsChanged.Broadcast();
 }
+
+void ANBPlayerState::ResetAttempts()
+{
+	NB_RETURN_IF_FALSE(HasAuthority(), "Only the server can reset attempts.");
+	UsedAttempts = 0;
+	OnAttemptsChanged.Broadcast();
+	ForceNetUpdate();
+}

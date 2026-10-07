@@ -18,10 +18,35 @@ ANBGameMode::ANBGameMode()
 void ANBGameMode::BeginPlay()
 {
 	Super::BeginPlay();
-	GenerateRandomNumbers();
+	TryStartRound();
 
 	NB_LOG("World=%s Actor=%s NetMode=%d Authority=%d",
 		*GetNameSafe(GetWorld()), *GetName(), static_cast<int32>(GetNetMode()), HasAuthority());
+}
+
+void ANBGameMode::PreLogin(const FString& Options, const FString& Address,
+	const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage)
+{
+	Super::PreLogin(Options, Address, UniqueId, ErrorMessage);
+	if (ErrorMessage.IsEmpty() && ChatPlayerNames.Num() >= RequiredPlayers)
+	{
+		ErrorMessage = TEXT("Number Baseball server is full (2 players).");
+		NB_LOG("Rejected connection: server is full.");
+	}
+}
+
+APlayerController* ANBGameMode::Login(UPlayer* NewPlayer, ENetRole InRemoteRole,
+	const FString& Portal, const FString& Options,
+	const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage)
+{
+	// PreLogin 이후 시간이 지났거나 여러 접속이 통과했을 수 있어 생성 직전 재검사한다.
+	if (ChatPlayerNames.Num() >= RequiredPlayers)
+	{
+		ErrorMessage = TEXT("Number Baseball server is full (2 players).");
+		NB_LOG("Rejected login: server is full.");
+		return nullptr;
+	}
+	return Super::Login(NewPlayer, InRemoteRole, Portal, Options, UniqueId, ErrorMessage);
 }
 
 void ANBGameMode::PostLogin(APlayerController* NewPlayer)
@@ -35,7 +60,7 @@ void ANBGameMode::PostLogin(APlayerController* NewPlayer)
 	ANBPlayerState* NBState = NewPlayer->GetPlayerState<ANBPlayerState>();
 	NB_RETURN_IF_FALSE(IsValid(NBState), "Expected NBPlayerState after PostLogin.");
 
-	// 빈 이름을 재사용한다. 정원 2명 제한은 M5에서 적용한다.
+	// 이탈한 플레이어의 빈 이름을 재사용한다.
 	TArray<FString> UsedNames;
 	ChatPlayerNames.GenerateValueArray(UsedNames);
 	int32 PlayerNumber = 1;
@@ -47,7 +72,7 @@ void ANBGameMode::PostLogin(APlayerController* NewPlayer)
 	ChatPlayerNames.Add(NBPlayer, AssignedName);
 	NBState->SetPlayerName(AssignedName);
 
-	// 서버에서 접속을 확인한다. 인원 제한과 시작 판정은 M5에서 추가한다.
+	TryStartRound();
 	NB_LOG("World=%s PlayerController=%s Class=%s NetMode=%d LocalController=%d",
 		*GetNameSafe(GetWorld()), *GetNameSafe(NewPlayer),
 		*NewPlayer->GetClass()->GetName(),
@@ -56,11 +81,93 @@ void ANBGameMode::PostLogin(APlayerController* NewPlayer)
 
 void ANBGameMode::Logout(AController* Exiting)
 {
+	bool bParticipantLeft = false;
 	if (ANBPlayerController* Player = Cast<ANBPlayerController>(Exiting))
 	{
-		ChatPlayerNames.Remove(Player);
+		bParticipantLeft = ChatPlayerNames.Remove(Player) > 0;
 	}
 	Super::Logout(Exiting);
+	if (bParticipantLeft)
+	{
+		SecretAnswer.Reset();
+		if (ANBGameState* NBState = GetGameState<ANBGameState>())
+		{
+			FNBRoundState WaitingState;
+			WaitingState.RoundId = NBState->GetRoundState().RoundId;
+			NBState->SetRoundState(WaitingState);
+		}
+	}
+}
+
+void ANBGameMode::TryStartRound()
+{
+	NB_RETURN_IF_FALSE(HasAuthority(), "Only the server can start a round.");
+	// 첫 로컬 PostLogin은 BeginPlay보다 먼저 올 수 있다. 두 생명주기에서 확인한다.
+	if (!HasActorBegunPlay() || ChatPlayerNames.Num() != RequiredPlayers)
+	{
+		return;
+	}
+	ANBGameState* NBState = GetGameState<ANBGameState>();
+	NB_RETURN_IF_FALSE(IsValid(NBState), "NBGameState is missing.");
+	if (NBState->GetRoundState().Phase != ENBRoundPhase::Waiting)
+	{
+		return;
+	}
+	for (const auto& Entry : ChatPlayerNames)
+	{
+		NB_RETURN_IF_FALSE(IsValid(Entry.Key.Get()) && IsValid(Entry.Key->GetPlayerState<ANBPlayerState>()),
+			"A participant has no NBPlayerState.");
+	}
+	for (const auto& Entry : ChatPlayerNames)
+	{
+		Entry.Key->GetPlayerState<ANBPlayerState>()->ResetAttempts();
+	}
+	GenerateRandomNumbers();
+	FNBRoundState NewState;
+	NewState.RoundId = NBState->GetRoundState().RoundId + 1;
+	NewState.Phase = ENBRoundPhase::Playing;
+	NBState->SetRoundState(NewState);
+}
+
+bool ANBGameMode::HaveAllPlayersExhaustedAttempts() const
+{
+	if (ChatPlayerNames.Num() != RequiredPlayers)
+	{
+		return false;
+	}
+	for (const auto& Entry : ChatPlayerNames)
+	{
+		const ANBPlayerState* State = IsValid(Entry.Key.Get())
+			? Entry.Key->GetPlayerState<ANBPlayerState>() : nullptr;
+		if (!IsValid(State) || State->HasRemainingAttempts())
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+void ANBGameMode::FinishRound(ENBRoundResult Result, ANBPlayerController* Winner)
+{
+	NB_RETURN_IF_FALSE(HasAuthority(), "Only the server can finish a round.");
+	ANBGameState* NBState = GetGameState<ANBGameState>();
+	NB_RETURN_IF_FALSE(IsValid(NBState), "NBGameState is missing.");
+	if (NBState->GetRoundState().Phase != ENBRoundPhase::Playing)
+	{
+		return;
+	}
+	FNBRoundState FinishedState = NBState->GetRoundState();
+	FinishedState.Phase = ENBRoundPhase::ShowingResult;
+	FinishedState.Result = Result;
+	if (Result == ENBRoundResult::Win)
+	{
+		const ANBPlayerState* WinnerState = IsValid(Winner) ? Winner->GetPlayerState<ANBPlayerState>() : nullptr;
+		NB_RETURN_IF_FALSE(IsValid(WinnerState), "Winner has no NBPlayerState.");
+		FinishedState.WinnerName = WinnerState->GetPlayerName();
+		FinishedState.WinnerPlayerId = WinnerState->GetPlayerId();
+	}
+	NBState->SetRoundState(FinishedState);
+	// 결과는 유지한다. 결과 전용 위젯과 3초 후 재시작은 M6/M7에서 연결한다.
 }
 
 void ANBGameMode::ProcessChatMessage(ANBPlayerController* Sender, const FString& Message)
@@ -123,12 +230,22 @@ bool ANBGameMode::CheckAnswer(const FString& Input, FNBGuessResult& OutResult) c
 	return UNBNumberBaseballLibrary::EvaluateGuess(SecretAnswer, Input, OutResult);
 }
 
-void ANBGameMode::ProcessGuess(ANBPlayerController* Sender, const FString& Input)
+void ANBGameMode::ProcessGuess(ANBPlayerController* Sender, const FString& Input, int32 SubmittedRoundId)
 {
 	NB_RETURN_IF_FALSE(HasAuthority(), "Guesses must be processed by the server.");
 	NB_RETURN_IF_FALSE(IsValid(Sender), "Guess sender is invalid.");
 	const FString* SenderName = ChatPlayerNames.Find(Sender);
 	NB_RETURN_IF_FALSE(SenderName, "Guess sender has not completed PostLogin.");
+	ANBGameState* NBState = GetGameState<ANBGameState>();
+	NB_RETURN_IF_FALSE(IsValid(NBState), "NBGameState is missing.");
+	const FNBRoundState& Round = NBState->GetRoundState();
+	if (SubmittedRoundId != Round.RoundId || Round.Phase != ENBRoundPhase::Playing)
+	{
+		NB_LOG("Rejected guess: SubmittedRound=%d CurrentRound=%d Phase=%d",
+			SubmittedRoundId, Round.RoundId, static_cast<int32>(Round.Phase));
+		Sender->ClientShowInputError(TEXT("현재 진행 중인 라운드에서만 제출할 수 있습니다."));
+		return;
+	}
 	ANBPlayerState* SenderState = Sender->GetPlayerState<ANBPlayerState>();
 	NB_RETURN_IF_FALSE(IsValid(SenderState), "Guess sender has no NBPlayerState.");
 	if (!SenderState->HasRemainingAttempts())
@@ -154,8 +271,6 @@ void ANBGameMode::ProcessGuess(ANBPlayerController* Sender, const FString& Input
 		return;
 	}
 
-	ANBGameState* NBState = GetGameState<ANBGameState>();
-	NB_RETURN_IF_FALSE(IsValid(NBState), "NBGameState is missing.");
 	// 검증/판정 및 결과 전달 준비가 끝난 유효한 제출만 한 번 소비한다.
 	if (!SenderState->TryConsumeAttempt())
 	{
@@ -163,9 +278,17 @@ void ANBGameMode::ProcessGuess(ANBPlayerController* Sender, const FString& Input
 		return;
 	}
 	// 이 메시지와 PlayerState 복제의 도착 순서를 가정하지 않도록 횟수를 함께 담는다.
-	const FString DisplayMessage = FString::Printf(TEXT("[숫자] %s: %s → %s [%d/%d]"),
-		**SenderName, *Input, *Result.ToDisplayString(),
+	const FString DisplayMessage = FString::Printf(TEXT("[R%d][숫자] %s: %s → %s [%d/%d]"),
+		Round.RoundId, **SenderName, *Input, *Result.ToDisplayString(),
 		SenderState->GetUsedAttempts(), SenderState->GetMaxAttempts());
 	NBState->MulticastReceiveMessage(DisplayMessage);
-	// 승리와 무승부 판정은 M5에서 추가한다.
+	// 마지막 기회에 맞혀도 승리다. 무승부보다 먼저 검사한다.
+	if (Result.Strikes == 3)
+	{
+		FinishRound(ENBRoundResult::Win, Sender);
+	}
+	else if (HaveAllPlayersExhaustedAttempts())
+	{
+		FinishRound(ENBRoundResult::Draw);
+	}
 }

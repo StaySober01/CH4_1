@@ -19,11 +19,16 @@ public:
 	void AppendMessage(const FString& Message);
 	void FocusChatInput();
 	void UpdateAttempts(int32 UsedAttempts, int32 MaxAttempts);
+	void SetRoundPlaying(bool bPlaying);
 
 protected:
 	virtual void NativeOnInitialized() override;
 
 private:
+	void RefreshGuessEnabled();
+	bool bRoundPlaying = false;
+	bool bHasAttempts = false;
+
 	UFUNCTION()
 	void HandleSendClicked();
 

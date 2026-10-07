@@ -108,14 +108,28 @@ void UNBChatWidget::UpdateAttempts(int32 UsedAttempts, int32 MaxAttempts)
 {
 	NB_RETURN_IF_FALSE(AttemptsText && GuessInput && GuessButton, "Check AttemptsText and guess widgets.");
 	const bool bStateReady = MaxAttempts > 0;
-	const bool bCanSubmit = bStateReady && UsedAttempts < MaxAttempts;
+	bHasAttempts = bStateReady && UsedAttempts < MaxAttempts;
 	AttemptsText->SetText(bStateReady
 		? FText::FromString(FString::Printf(TEXT("내 시도 횟수 [%d/%d]"), UsedAttempts, MaxAttempts))
 		: FText::FromString(TEXT("플레이어 정보 준비 중")));
+	RefreshGuessEnabled();
+}
+
+void UNBChatWidget::SetRoundPlaying(bool bPlaying)
+{
+	bRoundPlaying = bPlaying;
+	RefreshGuessEnabled();
+}
+
+void UNBChatWidget::RefreshGuessEnabled()
+{
+	NB_RETURN_IF_FALSE(GuessInput && GuessButton, "Guess widgets are missing.");
+	// GS와 PS 복제 도착 순서와 관계없이 두 조건을 모두 만족해야 한다.
+	const bool bCanSubmit = bRoundPlaying && bHasAttempts;
 	const bool bWasEnabled = GuessInput->GetIsEnabled();
 	GuessInput->SetIsEnabled(bCanSubmit);
 	GuessButton->SetIsEnabled(bCanSubmit);
-	if (bWasEnabled && bStateReady && !bCanSubmit)
+	if (bWasEnabled && !bCanSubmit)
 	{
 		FocusChatInput();
 	}

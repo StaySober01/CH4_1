@@ -29,6 +29,7 @@ public:
 
 	// 서버 전용 변경 함수. 유효성 판정을 마친 GameMode가 호출한다.
 	bool TryConsumeAttempt();
+	void ResetAttempts();
 
 	FNBOnAttemptsChanged OnAttemptsChanged;
 

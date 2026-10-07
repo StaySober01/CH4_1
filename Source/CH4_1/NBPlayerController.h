@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
+#include "NBGameTypes.h"
 #include "NBPlayerController.generated.h"
 
 class UNBChatWidget;
@@ -17,6 +18,7 @@ public:
 	void SendChat(const FString& Message);
 	void SubmitGuess(const FString& Input);
 	void ReceiveChatMessage(const FString& Message);
+	void RefreshRoundUI();
 
 	UFUNCTION(Client, Reliable)
 	void ClientShowInputError(const FString& Message);
@@ -31,12 +33,14 @@ private:
 	void UpdateAttemptUI();
 
 	TWeakObjectPtr<ANBPlayerState> BoundPlayerState;
+	int32 LastDisplayedRoundId = INDEX_NONE;
+	ENBRoundPhase LastDisplayedPhase = ENBRoundPhase::Waiting;
 
 	UFUNCTION(Server, Reliable)
 	void ServerSendChat(const FString& Message);
 
 	UFUNCTION(Server, Reliable)
-	void ServerSubmitGuess(const FString& Input);
+	void ServerSubmitGuess(const FString& Input, int32 SubmittedRoundId);
 
 	UPROPERTY(EditDefaultsOnly, Category = "NB|UI")
 	TSubclassOf<UNBChatWidget> ChatWidgetClass;

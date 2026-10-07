@@ -1,6 +1,6 @@
 # 숫자 야구 아키텍처
 
-작성 기준: 2026-10-06. **현재 확인한 구현**과 **확정한 구현 계획**을 구분한다. M1 PIE 클래스 배치와 M2~M4는 사용자 검증 완료. 현재 채팅·숫자 판정·PlayerState 횟수 관리/복제/UI를 구현했으며 승패·리셋·턴은 미구현이다.
+갱신 기준: 2026-10-07. **현재 확인한 구현**과 **확정한 구현 계획**을 구분한다. M1 PIE 클래스 배치와 M2~M5는 사용자 검증 완료. M5 이탈·재접속은 별도 프로세스 실행 안내 후 사용자 완료 보고를 받았다. 개별 로그와 강제 이전 RoundId 제출 등 경계 테스트 결과는 별도 미수집이다. 결과 전용 위젯·자동 재시작·턴은 미구현이다.
 
 ## 확정 요구사항 (2026-10-06 사용자 승인)
 
@@ -41,9 +41,9 @@
 | 환경 | 사용자 로그로 Listen Server + Client 실행 확인. 정식 빌드 결과 및 프로세스 설정은 별도 미확인 |
 | 저장소 | 분석 시작 시 git status --short 출력 없음 |
 
-Saved/Intermediate/Binaries 등의 생성 폴더는 실행 성공의 증거로 사용하지 않는다. M2에서 PC Server/Client RPC와 GS NetMulticast, M3에서 숫자 제출 RPC를 추가했다. M4는 PS의 UsedAttempts/MaxAttempts를 복제한다. 라운드 결과와 턴 상태는 아직 없다.
+Saved/Intermediate/Binaries 등의 생성 폴더는 실행 성공의 증거로 사용하지 않는다. M2에서 PC Server/Client RPC와 GS NetMulticast, M3에서 숫자 제출 RPC를 추가했다. M4는 PS의 UsedAttempts/MaxAttempts를 복제한다. M5는 GS의 FNBRoundState를 복제하고 숫자 제출에 RoundId 검사를 추가한다. 턴 상태는 아직 없다.
 
-## 2. 최종 목표 클래스 구조 (현재 M4 횟수 코드까지 작성)
+## 2. 최종 목표 클래스 구조 (현재 M5 라운드 코드까지 작성)
 
 현재 공통 진단 도구는 `NBUtility.h`다. LogNB에 함수명/줄번호를 포함하는 로그와 조건 실패 시 조기 반환 매크로를 제공한다. 화면 출력은 기본적으로 꺼져 있다. 순수 C++ 헤더로 서버/클라이언트 호출 위치에서 실행하며, 네트워크 전송이나 게임 판정을 담당하지 않는다. 사용법은 `Docs/NB_UTILITY.md`에 기록했다.
 
@@ -65,6 +65,21 @@ Saved/Intermediate/Binaries 등의 생성 폴더는 실행 성공의 증거로 �
 에셋 제안: `Content/Maps/L_NumberBaseball.umap`, `Content/Blueprints/BP_NBGameMode.uasset`, `Content/Blueprints/BP_NBPlayerController.uasset`, `Content/UI/WBP_NBChat.uasset`, `Content/UI/WBP_NBResult.uasset`. Blueprint는 클래스 기본값 및 화면 배치에 사용하고 핵심 규칙은 C++에 둔다. 필요한 단계에서만 생성한다.
 
 ## 3. 데이터 소유와 수정 권한
+
+### M5에서 작성한 라운드 경로
+
+- GM의 기존 `ChatPlayerNames`를 접속 완료된 참가자 표로 함께 사용한다. 2인 정원이며 한 명이 이탈하면 즉시 대기하므로 별도 라운드 참가자 목록을 중복 보관하지 않는다. 턴의 접속 순서 목록은 M9에서 추가한다.
+- `PreLogin`에서 정원을 검사하고, `Login`에서도 PC 생성 직전 다시 검사한다. PreLogin을 통과한 시점과 실제 입장 시점은 다를 수 있기 때문이다. 기존 엔진 Super 처리는 유지한다.
+- `PostLogin`의 이름 등록 후와 GM `BeginPlay`에서 `TryStartRound`를 호출한다. BeginPlay 완료·2인 접속·Waiting일 때만 PS 횟수 초기화 → 정답 생성 → RoundId 증가 → Playing 공개 순서로 시작한다. 첫 호스트 PostLogin이 BeginPlay보다 먼저 와도 임시 타이머 없이 처리한다.
+- `ServerSubmitGuess(Input, SubmittedRoundId)`는 소유 PC를 발신자로 사용한다. GM이 참가 여부·현재 RoundId·Playing·남은 기회·입력 형식을 검사한 뒤 한 번 소비한다. 클라이언트의 RoundId는 서버 값과 비교하는 용도이며 서버 상태를 바꾸지 못한다.
+- 판정 메시지는 `[R번호][숫자] 이름: 입력 → 판정 [사용/최대]` 형식이다. 이어서 3S 승리를 먼저 검사하고, 아니라면 두 참가자 모두 소진했을 때만 무승부로 확정한다. `FinishRound`는 Playing에서만 ShowingResult로 바꾸므로 뒤따른 제출은 결과를 바꾸지 못한다.
+- GS의 `FNBRoundState`는 RoundId, Phase, Result, WinnerName, WinnerPlayerId를 묶어 RepNotify한다. 정답은 없다. GM이 결정하며 GS는 보관/복제한다. `SetRoundState`는 서버 권한을 검사하고 호스트를 직접 알린다. 원격은 `OnRep_RoundState`에서 같은 알림을 받는다.
+- GS BeginPlay/상태 변경은 로컬 PC의 `RefreshRoundUI`를 호출한다. PC도 위젯 생성 후 현재 GS를 조회한다. UI 준비 전 알림은 버려도 현재 상태로 복원한다. 초기 조회와 알림이 겹치는 경우 RoundId/Phase로 채팅 상태 문구 중복을 막는다. 이 값은 UI 표시용이며 서버 판정에 쓰지 않는다.
+- UI는 `bRoundPlaying && bHasAttempts`일 때만 숫자 입력을 활성화한다. GS와 PS 어느 쪽 알림이 먼저 와도 종료 상태에서 PS 알림이 입력을 다시 열지 않는다. 다른 Actor의 원자적 도착은 보장하지 않으며 순간적인 표시 지연이 있어도 최종 허용은 서버가 결정한다.
+- `Logout`은 참가자를 제거하고 정답을 비우며 같은 RoundId의 Waiting으로 돌아간다. 진행 중뿐 아니라 결과 표시 중 이탈도 대기로 전환한다. 남은 횟수는 다음 2인 시작에서 0으로 초기화한다. 다시 시작할 때 RoundId를 증가시켜 이전 라운드 요청을 거절한다. 개발 로그는 새 정답 생성 호출로 확인하며 우연히 같은 정답이 나올 수 있다.
+- M5에서는 기존 채팅창에 라운드/결과를 표시한다. 결과 상태는 M7의 자동 리셋이 추가되기 전까지 유지한다. 재접속 새 라운드에 필요한 `ResetAttempts`만 이번 단계로 앞당겼다. 결과 전용 위젯은 M6이며 새 UMG 바인딩은 이번에 없다.
+
+아래 M2~M4 설명은 해당 단계의 구현 기록이다. 정답 생성 시점·승패·입장 제한은 위 M5 변경을 우선한다.
 
 ### M2에서 작성한 실제 채팅 경로
 
@@ -133,9 +148,9 @@ M3에서는 결과를 반환하는 계산이 클라이언트 실행 파일에도
       실패: ClientShowInputError [Client, Reliable] → 제출자 UI; 기회 유지
       성공: 규칙 라이브러리로 S/B 계산
           → PlayerState UsedAttempts를 정확히 1 증가
+          → GameState MulticastReceiveMessage [NetMulticast, Reliable]
           → 3S 승리 우선 확인, 그다음 전체 기회 소진 무승부 확인
           → GameState 공개 결과/단계 변경
-          → GameState MulticastReceiveMessage [NetMulticast, Reliable]
           → PlayerState/GameState Replication
 각 클라이언트
   → 메시지 이벤트는 채팅 표시
