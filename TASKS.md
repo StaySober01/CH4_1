@@ -6,7 +6,7 @@
 
 - `[x]`는 실제 수행 및 확인한 작업만 의미한다. 계획이나 예상 성공은 체크하지 않는다.
 - 현재 상태: M0 완료. M1 코드/맵 연결 및 2인 PIE 클래스 생성 범위 확인 완료(사용자 제공 로그). 정식 Editor Target 빌드 결과는 별도 전달되지 않아 확인 대기로 남긴다.
-- M2~M5 사용자 검증 완료 보고. M5 이탈·재접속은 별도 프로세스 실행 안내 후 사용자 완료 보고를 받았다. M6 미착수. M1 당시의 별도 빌드 로그는 미수집 상태로 유지한다.
+- M2~M5 사용자 검증 완료 보고. M5 이탈·재접속은 별도 프로세스 실행 안내 후 사용자 완료 보고를 받았다. M6 사용자 검증 완료. M7 미착수. M1 당시의 별도 빌드 로그는 미수집 상태로 유지한다.
 - M1~M8 필수 기반/기능, M9~M10 도전, M11 제출 정리. 한 번에 하나의 milestone만 진행한다.
 - 파일 경로 표에서 `.h/.cpp`는 두 파일을 뜻하고, C++ 경로는 `Source/CH4_1/` 기준이다. 에셋과 설정은 루트 기준이다.
 - 각 milestone 종료 시 아래 검증 기록 양식을 채운다. 실행 검증이 남으면 완료 처리하지 않는다.
@@ -121,18 +121,20 @@
 - [x] M5-4b 정적 검토 및 Docs/M5_EDITOR_CHECKLIST.md 작성
 - [x] M5-5 빌드·2인 실행 검증 — 사용자 완료 보고. 이탈·재접속은 PIE 외 별도 프로세스 실행 안내 후 확인
 
-## M6. 결과 공지 UI — 미착수
+## M6. 결과 공지 UI — 완료(사용자 검증)
 
 - 목표: 리셋 전에 모든 플레이어가 결과를 볼 수 있는 UI 완성.
-- 수정 파일: UI/NBResultWidget.h/.cpp, NBPlayerController.h/.cpp, NBGameState.h/.cpp, Content/UI/WBP_NBResult.uasset, Content/Blueprints/BP_NBPlayerController.uasset.
+- 수정 파일: UI/NBResultWidget.h/.cpp, NBPlayerController.h/.cpp. GS는 M5 알림을 그대로 재사용하여 수정 없음. 사용자 작업: Content/UI/WBP_NBResult.uasset, Content/Blueprints/BP_NBPlayerController.uasset.
 - 클래스 책임: GS 상태 알림, PC 로컬 위젯 수명/연결, ResultWidget 표시.
 - 실행 위치: 위젯은 로컬, 결과값은 서버 작성.
 - RPC/Replication: 기존 라운드 RepNotify 활용, 결과 표시용 신규 RPC 불필요.
 - 완료 조건: 승자/무승부 양쪽 표시, 위젯 늦은 생성에도 현재 상태 표시, 중복 생성 없음.
 - 검증: C + P(호스트/원격 결과 일치) + H(승자 이름·무승부·입력 잠금·레이아웃).
-- [ ] M6-1 결과 위젯 C++ 및 UMG 연결
-- [ ] M6-2 상태 알림과 초기 스냅샷 연결
-- [ ] M6-3 빌드·두 창 결과 표시 검증 — 수동 검증 필요
+- [x] M6-1a 결과 위젯 C++ 및 로컬 PC 생성/정리 코드 작성
+- [x] M6-1b 사용자 WBP_NBResult 생성, ResultText 바인딩, ResultWidgetClass 지정 — 사용자 완료 보고
+- [x] M6-2 상태 알림과 초기 스냅샷 연결, 채팅 입력을 막지 않는 표시/숨김 코드 작성
+- [x] M6-2a 정적 검토 및 Docs/M6_EDITOR_CHECKLIST.md 작성
+- [x] M6-3 빌드·두 창 결과 표시 검증 — 사용자 완료 보고
 
 ## M7. 결과 표시 후 게임 리셋 — 미착수
 
@@ -329,3 +331,19 @@ Editor 수동 확인: 확인 항목 / 확인자 / 결과 또는 '수동 검증 �
 - 사용자 '검증 완료' 보고를 근거로 M5 일반 검증 완료를 기록한다. PIE 창 종료 시 전체 세션이 종료되는 문제에 대해 별도 호스트/클라이언트 프로세스 실행을 안내했고, 이어서 완료 보고를 받았다.
 - Codex가 빌드/실행한 결과가 아니며 개별 실행 로그는 수집하지 않았다. 이전 RoundId 강제 제출이나 종료 후 지연 RPC 등 별도 방어 경계 테스트의 실행 여부는 확인되지 않았다.
 - 위 코드 작성 시점의 검증 대기 기록은 이 사용자 확인으로 해소한다. M5 완료, M6 결과 공지 UI는 다음 단계 요청 전까지 미착수다.
+
+### M6 코드 작업 기록
+
+- 시작 시 Git 변경 사항 없음. 기존 GS 상태 알림과 PC 초기 조회를 재사용했다.
+- UNBResultWidget의 ResultText에 서버 스냅샷의 승자 이름/무승부를 표시한다. ShowingResult의 Win/Draw만 표시하고 다른 상태는 텍스트를 비우고 숨긴다.
+- PC BeginPlay에서 로컬 결과 위젯을 한 번 생성하여 ZOrder=10으로 추가한다. 생성 직후 현재 상태 조회, 이후 RefreshRoundUI 갱신, EndPlay 제거를 연결했다. 채팅 문구 중복 검사 전에 결과 위젯을 갱신한다.
+- 결과 위젯은 HitTestInvisible로 표시하여 기존 채팅 클릭을 막지 않는다. GameMode/규칙/RPC/GS 코드와 에셋은 변경하지 않았다. ResultWidgetClass 누락 시 명확한 오류 로그를 남기며 기존 채팅 초기화는 계속한다.
+- 정적 검토: generated.h/include/BindWidget, 선언·정의·호출, 초기 조회 및 숨김/정리 경로, UE 5.6 AddToPlayerScreen 시그니처와 HitTestInvisible 정의, git diff --check 확인.
+- 빌드/Editor/PIE 미실행. 사용자 작업은 Docs/M6_EDITOR_CHECKLIST.md의 WBP_NBResult 생성·ResultWidgetClass 연결·양쪽 표시/입력/이탈 검증이다. 수동 검증 필요.
+- M6 코드 작성 완료, 실행 검증 대기. M7 자동 재시작 미착수.
+
+### M6 사용자 검증 완료
+
+- 사용자 '검증 완료' 보고를 근거로 M6 빌드·UMG 연결·2인 결과 표시 검증 완료를 기록한다. Codex가 직접 실행한 결과는 아니다.
+- 개별 실행 로그와 UI 생성/상태 도착 순서별 재현 결과는 별도로 수집하지 않았다. 해당 경계 사례까지 직접 관찰했다고 주장하지 않는다.
+- 위 코드 작성 시점의 검증 대기는 사용자 확인으로 해소한다. M6 완료, M7 미착수. 이번에는 문서만 갱신한다.

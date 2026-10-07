@@ -6,6 +6,7 @@
 #include "NBGameState.h"
 #include "NBPlayerState.h"
 #include "UI/NBChatWidget.h"
+#include "UI/NBResultWidget.h"
 
 void ANBPlayerController::BeginPlay()
 {
@@ -20,6 +21,26 @@ void ANBPlayerController::BeginPlay()
 	{
 		return;
 	}
+
+	// 로컬 PC당 한 번 생성해 상태에 따라 표시/숨김만 바꾼다.
+	if (ResultWidgetClass)
+	{
+		ResultWidget = CreateWidget<UNBResultWidget>(this, ResultWidgetClass);
+		if (IsValid(ResultWidget))
+		{
+			ResultWidget->SetVisibility(ESlateVisibility::Collapsed);
+			ResultWidget->AddToPlayerScreen(10);
+		}
+		else
+		{
+			NB_ERROR("Failed to create ResultWidget.");
+		}
+	}
+	else
+	{
+		NB_ERROR("Set ResultWidgetClass on BP_NBPlayerController.");
+	}
+	RefreshRoundUI();
 
 	NB_RETURN_IF_FALSE(ChatWidgetClass, "Set ChatWidgetClass on BP_NBPlayerController.");
 	ChatWidget = CreateWidget<UNBChatWidget>(this, ChatWidgetClass);
@@ -100,11 +121,20 @@ void ANBPlayerController::ServerSubmitGuess_Implementation(const FString& Input,
 
 void ANBPlayerController::RefreshRoundUI()
 {
-	if (!IsLocalController() || !IsValid(ChatWidget))
+	if (!IsLocalController())
 	{
 		return;
 	}
 	const ANBGameState* NBState = GetWorld()->GetGameState<ANBGameState>();
+	if (IsValid(ResultWidget))
+	{
+		// 채팅 문구 중복 검사와 별개로 현재 상태를 항상 반영한다.
+		ResultWidget->UpdateRoundState(IsValid(NBState) ? NBState->GetRoundState() : FNBRoundState());
+	}
+	if (!IsValid(ChatWidget))
+	{
+		return;
+	}
 	if (!IsValid(NBState))
 	{
 		ChatWidget->SetRoundPlaying(false);
@@ -195,6 +225,11 @@ void ANBPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 		BoundPlayerState->OnAttemptsChanged.RemoveAll(this);
 	}
 	BoundPlayerState.Reset();
+	if (IsValid(ResultWidget))
+	{
+		ResultWidget->RemoveFromParent();
+		ResultWidget = nullptr;
+	}
 	if (IsValid(ChatWidget))
 	{
 		ChatWidget->RemoveFromParent();

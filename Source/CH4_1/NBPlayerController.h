@@ -6,6 +6,7 @@
 #include "NBPlayerController.generated.h"
 
 class UNBChatWidget;
+class UNBResultWidget;
 class ANBPlayerState;
 
 // 소유 플레이어의 입력과 서버 요청, 로컬 UI 연결을 담당할 클래스다.
@@ -47,6 +48,12 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UNBChatWidget> ChatWidget;
+
+	UPROPERTY(EditDefaultsOnly, Category = "NB|UI")
+	TSubclassOf<UNBResultWidget> ResultWidgetClass;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UNBResultWidget> ResultWidget;
 
 	// UI 생성 전 도착한 메시지만 임시 보관한다. 서버 채팅 이력이 아니다.
 	TArray<FString> PendingMessages;

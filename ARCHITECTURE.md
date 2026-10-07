@@ -1,6 +1,6 @@
 # 숫자 야구 아키텍처
 
-갱신 기준: 2026-10-07. **현재 확인한 구현**과 **확정한 구현 계획**을 구분한다. M1 PIE 클래스 배치와 M2~M5는 사용자 검증 완료. M5 이탈·재접속은 별도 프로세스 실행 안내 후 사용자 완료 보고를 받았다. 개별 로그와 강제 이전 RoundId 제출 등 경계 테스트 결과는 별도 미수집이다. 결과 전용 위젯·자동 재시작·턴은 미구현이다.
+갱신 기준: 2026-10-07. **현재 확인한 구현**과 **확정한 구현 계획**을 구분한다. M1 PIE 클래스 배치와 M2~M5는 사용자 검증 완료. M5 이탈·재접속은 별도 프로세스 실행 안내 후 사용자 완료 보고를 받았다. 개별 로그와 강제 이전 RoundId 제출 등 경계 테스트 결과는 별도 미수집이다. M6 결과 위젯도 사용자 검증 완료 보고를 받았다. 자동 재시작·턴은 미구현이다.
 
 ## 확정 요구사항 (2026-10-06 사용자 승인)
 
@@ -43,7 +43,7 @@
 
 Saved/Intermediate/Binaries 등의 생성 폴더는 실행 성공의 증거로 사용하지 않는다. M2에서 PC Server/Client RPC와 GS NetMulticast, M3에서 숫자 제출 RPC를 추가했다. M4는 PS의 UsedAttempts/MaxAttempts를 복제한다. M5는 GS의 FNBRoundState를 복제하고 숫자 제출에 RoundId 검사를 추가한다. 턴 상태는 아직 없다.
 
-## 2. 최종 목표 클래스 구조 (현재 M5 라운드 코드까지 작성)
+## 2. 최종 목표 클래스 구조 (현재 M6 결과 위젯 코드까지 작성)
 
 현재 공통 진단 도구는 `NBUtility.h`다. LogNB에 함수명/줄번호를 포함하는 로그와 조건 실패 시 조기 반환 매크로를 제공한다. 화면 출력은 기본적으로 꺼져 있다. 순수 C++ 헤더로 서버/클라이언트 호출 위치에서 실행하며, 네트워크 전송이나 게임 판정을 담당하지 않는다. 사용법은 `Docs/NB_UTILITY.md`에 기록했다.
 
@@ -65,6 +65,16 @@ Saved/Intermediate/Binaries 등의 생성 폴더는 실행 성공의 증거로 �
 에셋 제안: `Content/Maps/L_NumberBaseball.umap`, `Content/Blueprints/BP_NBGameMode.uasset`, `Content/Blueprints/BP_NBPlayerController.uasset`, `Content/UI/WBP_NBChat.uasset`, `Content/UI/WBP_NBResult.uasset`. Blueprint는 클래스 기본값 및 화면 배치에 사용하고 핵심 규칙은 C++에 둔다. 필요한 단계에서만 생성한다.
 
 ## 3. 데이터 소유와 수정 권한
+
+### M6 결과 공지 UI
+
+`UNBResultWidget`은 필수 BindWidget `ResultText`(TextBlock) 하나와 `UpdateRoundState`를 갖는다. 서버 스냅샷을 표시할 뿐 World/GameMode 조회·판정·RPC·타이머는 없다. ShowingResult의 Win은 승자 이름, Draw는 무승부 문구를 표시하고 그 외에는 텍스트를 비우고 Collapsed로 숨긴다.
+
+PC는 로컬 BeginPlay에서 ResultWidgetClass로 한 번 생성하고 AddToPlayerScreen(10)으로 채팅 위에 배치한다. 생성 직후 및 기존 GS 알림의 RefreshRoundUI에서 현재 상태를 전달한다. 위젯 준비 이전 알림은 현재 스냅샷 조회로 복원한다. 채팅의 RoundId/Phase 중복 문구 검사 전에 결과 위젯을 갱신하여 기존 채팅 표시 여부가 결과 UI 복원을 막지 않게 했다. PC EndPlay에서 제거한다.
+
+공지는 HitTestInvisible로 표시하여 자식을 포함한 마우스 히트 테스트를 제외한다. 포커스를 가져오거나 입력 모드를 변경하지 않으며 결과 중에도 채팅은 사용 가능하다. 숫자 입력 잠금은 기존 단계/횟수 조건을 유지한다. GS와 서버 규칙 변경, 신규 RPC는 없다.
+
+사용자는 WBP_NBResult를 NBResultWidget 부모로 생성하고 BP_NBPlayerController의 ResultWidgetClass를 지정한다. 공지 전용 위젯이 추가되어도 기존 채팅 결과 기록은 유지한다. 결과 공지는 M7 전까지 유지되며 이탈로 Waiting이 되면 숨긴다. 세부 절차는 Docs/M6_EDITOR_CHECKLIST.md에 있다.
 
 ### M5에서 작성한 라운드 경로
 
