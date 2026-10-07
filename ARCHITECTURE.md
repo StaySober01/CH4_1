@@ -1,6 +1,6 @@
 # 숫자 야구 아키텍처
 
-작성 기준: 2026-10-06. **현재 확인한 구현**과 **확정한 구현 계획**을 구분한다. M1 PIE 클래스 배치, M2 채팅, M3 정답 생성·검증·판정은 사용자 검증 완료. M3 빌드/규칙 테스트/위젯/PIE 결과는 사용자의 '모두 검증 완료' 보고를 근거로 기록한다.
+작성 기준: 2026-10-06. **현재 확인한 구현**과 **확정한 구현 계획**을 구분한다. M1 PIE 클래스 배치와 M2~M4는 사용자 검증 완료. 현재 채팅·숫자 판정·PlayerState 횟수 관리/복제/UI를 구현했으며 승패·리셋·턴은 미구현이다.
 
 ## 확정 요구사항 (2026-10-06 사용자 승인)
 
@@ -41,9 +41,9 @@
 | 환경 | 사용자 로그로 Listen Server + Client 실행 확인. 정식 빌드 결과 및 프로세스 설정은 별도 미확인 |
 | 저장소 | 분석 시작 시 git status --short 출력 없음 |
 
-Saved/Intermediate/Binaries 등의 생성 폴더는 실행 성공의 증거로 사용하지 않는다. 사용자가 M1 맵/BP 및 Config를 설정했고 실제 클래스 적용을 PIE 로그로 확인했다. M2에서 PC Server/Client RPC와 GS NetMulticast를 추가했다. 이름은 기존 PlayerState SetPlayerName 경로를 이용하며 새 게임 상태 복제 프로퍼티는 아직 없다.
+Saved/Intermediate/Binaries 등의 생성 폴더는 실행 성공의 증거로 사용하지 않는다. M2에서 PC Server/Client RPC와 GS NetMulticast, M3에서 숫자 제출 RPC를 추가했다. M4는 PS의 UsedAttempts/MaxAttempts를 복제한다. 라운드 결과와 턴 상태는 아직 없다.
 
-## 2. 최종 목표 클래스 구조 (현재 M3 판정 코드까지 작성)
+## 2. 최종 목표 클래스 구조 (현재 M4 횟수 코드까지 작성)
 
 현재 공통 진단 도구는 `NBUtility.h`다. LogNB에 함수명/줄번호를 포함하는 로그와 조건 실패 시 조기 반환 매크로를 제공한다. 화면 출력은 기본적으로 꺼져 있다. 순수 C++ 헤더로 서버/클라이언트 호출 위치에서 실행하며, 네트워크 전송이나 게임 판정을 담당하지 않는다. 사용법은 `Docs/NB_UTILITY.md`에 기록했다.
 
@@ -79,15 +79,29 @@ Saved/Intermediate/Binaries 등의 생성 폴더는 실행 성공의 증거로 �
 - 필수 BindWidget: ChatInput(EditableTextBox), SendButton(Button), ChatScrollBox(ScrollBox), ChatHistoryText(TextBlock). 사용자 WBP_NBChat 및 BP의 ChatWidgetClass 설정이 필요하다.
 - M2의 UIOnly 입력 모드는 채팅에 키보드/마우스를 사용하기 위한 설정이다. 서버의 원격 PC나 Dedicated Server에서는 위젯을 만들지 않는다.
 
-### 최종 목표 데이터 구분
+### M4에서 작성한 횟수 경로
 
-M3 실제 구현: SecretAnswer는 GM의 private FString이고 BeginPlay에서 한 번 생성한다. 후보 1~9 중 무작위 하나를 뽑고 제거하는 과정을 3번 수행한다. GenerateRandomNumbers의 정답 로그는 서버 개발 Output Log 전용이며 NBUtility 화면 출력 경로를 사용하지 않는다.
+GM ProcessGuess → 제출자 PS의 남은 기회 검사 → 입력 검증/판정 → TryConsumeAttempt → UsedAttempts 증가 → 서버의 OnAttemptsChanged 및 클라이언트 RepNotify → 각 로컬 PC UpdateAttemptUI → 위젯 UpdateAttempts.
+
+- UsedAttempts와 MaxAttempts는 PS가 보관하고 서버에서만 바꾼다. DOREPLIFETIME의 소유자 제한 없는 복제로 상대의 PS 상태도 클라이언트에 전달한다. GetRemainingAttempts는 파생값이며 별도 복제하지 않는다.
+- 로컬 화면의 AttemptsText는 자신의 PS만 표시한다. 상대의 각 제출 횟수는 전체 판정 메시지 `[사용/최대]`에서 확인한다. 별도 점수판은 만들지 않는다.
+- 원격 클라이언트의 OnRep_Attempts와 서버의 TryConsumeAttempt가 같은 네이티브 델리게이트를 Broadcast한다. 델리게이트는 같은 프로세스 내 알림이며 네트워크 전송은 프로퍼티 복제가 담당한다.
+- PC는 BeginPlay에서 위젯 생성 후 PS를 연결하고, 늦게 도착한 PS는 OnRep_PlayerState에서 연결한다. 연결 시 현재 값도 즉시 읽는다. PS 교체/EndPlay 시 연결을 해제한다.
+- UI 준비 전 상태는 MaxAttempts=0을 전달해 표시한다(PS의 실제 최대값을 변경하는 것이 아님). 준비되면 0/3, 소진되면 3/3을 표시하고 숫자 입력만 차단한다. 서버도 별도로 검사하므로 늦게 도착한 추가 제출은 4번째 기회를 소비하지 않는다.
+- GM은 결과 메시지에 소비 직후 횟수를 넣는다. PS 복제와 GS Multicast 사이에 도착 순서를 가정하지 않는다. 연속 입력 시 복제는 중간값을 생략할 수 있지만 각각의 판정 메시지는 해당 시도 횟수를 보존한다.
+- 횟수 리셋/승패/라운드 전환은 아직 없다. M4 테스트에서 두 플레이어가 모두 소진한 뒤 재시험하려면 PIE를 종료/재시작한다.
+
+### M3에서 작성한 판정 경로
+
+SecretAnswer는 GM의 private FString이고 BeginPlay에서 한 번 생성한다. 후보 1~9 중 무작위 하나를 뽑고 제거하는 과정을 3번 수행한다. GenerateRandomNumbers의 정답 로그는 서버 개발 Output Log 전용이며 NBUtility 화면 출력 경로를 사용하지 않는다.
 
 숫자 입력은 `GuessInput/GuessButton → PC SubmitGuess → ServerSubmitGuess → GM ProcessGuess → CheckAnswer → UNBNumberBaseballLibrary::EvaluateGuess`로 처리한다. ProcessGuess에서 ValidateInput으로 오류 메시지를 먼저 얻는다. EvaluateGuess도 인수 유효성을 검사하여 독립 호출 시 안전하게 동작한다. 둘 다 상태를 수정하지 않는 순수 계산이다.
 
 FNBGuessResult는 Strikes/Balls와 ToDisplayString을 제공한다. 유효 입력은 기존 GS Multicast로 `[숫자] Player N: 입력 → 결과`를 모든 현재 플레이어에게 전달한다. 오류는 제출자에게만 안내한다. SecretAnswer는 메시지 인자로 전달하지 않는다.
 
 M3에서는 결과를 반환하는 계산이 클라이언트 실행 파일에도 존재하지만, 실제 플레이 판정에 사용할 정답과 진행 권한은 서버 GM에만 있다. 위젯은 로컬 판정을 하지 않는다. 필수 바인딩 GuessInput(EditableTextBox), GuessButton(Button)이 추가되며 기존 네 위젯을 유지한다. 한 라운드 단계나 횟수/승패를 아직 관리하지 않으므로 3S 이후에도 계속 제출할 수 있다.
+
+### 최종 목표 데이터 구분
 
 여기서 데이터 보관과 네트워크 owning connection을 구분한다. 클라이언트가 PlayerController를 소유한다는 것은 요청 RPC의 경로를 가진다는 뜻이며, 서버 게임 상태를 임의로 수정할 권한이 있다는 뜻이 아니다.
 

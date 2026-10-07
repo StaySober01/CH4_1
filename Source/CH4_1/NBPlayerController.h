@@ -5,6 +5,7 @@
 #include "NBPlayerController.generated.h"
 
 class UNBChatWidget;
+class ANBPlayerState;
 
 // 소유 플레이어의 입력과 서버 요청, 로컬 UI 연결을 담당할 클래스다.
 UCLASS()
@@ -22,8 +23,15 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void OnRep_PlayerState() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
+	void BindAttemptState();
+	void UpdateAttemptUI();
+
+	TWeakObjectPtr<ANBPlayerState> BoundPlayerState;
+
 	UFUNCTION(Server, Reliable)
 	void ServerSendChat(const FString& Message);
 

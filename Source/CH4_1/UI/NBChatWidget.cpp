@@ -23,6 +23,8 @@ void UNBChatWidget::NativeOnInitialized()
 	GuessButton->OnClicked.AddDynamic(this, &UNBChatWidget::HandleGuessClicked);
 	GuessInput->OnTextCommitted.AddDynamic(this, &UNBChatWidget::HandleGuessCommitted);
 	GuessInput->SetClearKeyboardFocusOnCommit(false);
+	// PlayerController가 자기 PlayerState를 연결하기 전에는 숫자 제출을 막는다.
+	UpdateAttempts(0, 0);
 }
 
 void UNBChatWidget::HandleSendClicked()
@@ -92,5 +94,29 @@ void UNBChatWidget::SubmitGuess()
 	GuessInput->SetText(FText::GetEmpty());
 	// 문자열을 그대로 전달한다. 최종 검증/판정은 서버에서 수행한다.
 	Player->SubmitGuess(Input);
-	GuessInput->SetUserFocus(Player);
+	if (GuessInput->GetIsEnabled())
+	{
+		GuessInput->SetUserFocus(Player);
+	}
+	else
+	{
+		FocusChatInput();
+	}
+}
+
+void UNBChatWidget::UpdateAttempts(int32 UsedAttempts, int32 MaxAttempts)
+{
+	NB_RETURN_IF_FALSE(AttemptsText && GuessInput && GuessButton, "Check AttemptsText and guess widgets.");
+	const bool bStateReady = MaxAttempts > 0;
+	const bool bCanSubmit = bStateReady && UsedAttempts < MaxAttempts;
+	AttemptsText->SetText(bStateReady
+		? FText::FromString(FString::Printf(TEXT("내 시도 횟수 [%d/%d]"), UsedAttempts, MaxAttempts))
+		: FText::FromString(TEXT("플레이어 정보 준비 중")));
+	const bool bWasEnabled = GuessInput->GetIsEnabled();
+	GuessInput->SetIsEnabled(bCanSubmit);
+	GuessButton->SetIsEnabled(bCanSubmit);
+	if (bWasEnabled && bStateReady && !bCanSubmit)
+	{
+		FocusChatInput();
+	}
 }

@@ -18,6 +18,7 @@ class CH4_1_API UNBChatWidget : public UUserWidget
 public:
 	void AppendMessage(const FString& Message);
 	void FocusChatInput();
+	void UpdateAttempts(int32 UsedAttempts, int32 MaxAttempts);
 
 protected:
 	virtual void NativeOnInitialized() override;
@@ -44,6 +45,9 @@ private:
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UButton> GuessButton;
+
+	UPROPERTY(meta = (BindWidget))
+	TObjectPtr<UTextBlock> AttemptsText;
 
 	UPROPERTY(meta = (BindWidget))
 	TObjectPtr<UEditableTextBox> ChatInput;

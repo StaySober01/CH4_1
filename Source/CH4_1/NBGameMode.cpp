@@ -129,6 +129,15 @@ void ANBGameMode::ProcessGuess(ANBPlayerController* Sender, const FString& Input
 	NB_RETURN_IF_FALSE(IsValid(Sender), "Guess sender is invalid.");
 	const FString* SenderName = ChatPlayerNames.Find(Sender);
 	NB_RETURN_IF_FALSE(SenderName, "Guess sender has not completed PostLogin.");
+	ANBPlayerState* SenderState = Sender->GetPlayerState<ANBPlayerState>();
+	NB_RETURN_IF_FALSE(IsValid(SenderState), "Guess sender has no NBPlayerState.");
+	if (!SenderState->HasRemainingAttempts())
+	{
+		NB_LOG("Rejected guess: Sender=%s Attempts=%d/%d", **SenderName,
+			SenderState->GetUsedAttempts(), SenderState->GetMaxAttempts());
+		Sender->ClientShowInputError(TEXT("기회를 모두 사용했습니다. 채팅은 계속할 수 있습니다."));
+		return;
+	}
 
 	FString ErrorMessage;
 	if (!UNBNumberBaseballLibrary::ValidateInput(Input, ErrorMessage))
@@ -147,8 +156,16 @@ void ANBGameMode::ProcessGuess(ANBPlayerController* Sender, const FString& Input
 
 	ANBGameState* NBState = GetGameState<ANBGameState>();
 	NB_RETURN_IF_FALSE(IsValid(NBState), "NBGameState is missing.");
-	const FString DisplayMessage = FString::Printf(TEXT("[숫자] %s: %s → %s"),
-		**SenderName, *Input, *Result.ToDisplayString());
+	// 검증/판정 및 결과 전달 준비가 끝난 유효한 제출만 한 번 소비한다.
+	if (!SenderState->TryConsumeAttempt())
+	{
+		Sender->ClientShowInputError(TEXT("기회를 모두 사용했습니다."));
+		return;
+	}
+	// 이 메시지와 PlayerState 복제의 도착 순서를 가정하지 않도록 횟수를 함께 담는다.
+	const FString DisplayMessage = FString::Printf(TEXT("[숫자] %s: %s → %s [%d/%d]"),
+		**SenderName, *Input, *Result.ToDisplayString(),
+		SenderState->GetUsedAttempts(), SenderState->GetMaxAttempts());
 	NBState->MulticastReceiveMessage(DisplayMessage);
-	// M3는 판정까지만 수행한다. 횟수 소비와 3S 승리는 M4/M5에서 추가한다.
+	// 승리와 무승부 판정은 M5에서 추가한다.
 }
