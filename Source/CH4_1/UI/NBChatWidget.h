@@ -20,6 +20,7 @@ public:
 	void FocusChatInput();
 	void UpdateAttempts(int32 UsedAttempts, int32 MaxAttempts);
 	void SetRoundPlaying(bool bPlaying);
+	void ClearGuessInput();
 
 protected:
 	virtual void NativeOnInitialized() override;

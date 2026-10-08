@@ -89,6 +89,7 @@ void ANBGameMode::Logout(AController* Exiting)
 	Super::Logout(Exiting);
 	if (bParticipantLeft)
 	{
+		GetWorldTimerManager().ClearTimer(ResetTimerHandle);
 		SecretAnswer.Reset();
 		if (ANBGameState* NBState = GetGameState<ANBGameState>())
 		{
@@ -113,6 +114,16 @@ void ANBGameMode::TryStartRound()
 	{
 		return;
 	}
+	StartRound();
+}
+
+void ANBGameMode::StartRound()
+{
+	NB_RETURN_IF_FALSE(HasAuthority(), "Only the server can start a round.");
+	NB_RETURN_IF_FALSE(ChatPlayerNames.Num() == RequiredPlayers, "A round requires two players.");
+	ANBGameState* NBState = GetGameState<ANBGameState>();
+	NB_RETURN_IF_FALSE(IsValid(NBState), "NBGameState is missing.");
+	GetWorldTimerManager().ClearTimer(ResetTimerHandle);
 	for (const auto& Entry : ChatPlayerNames)
 	{
 		NB_RETURN_IF_FALSE(IsValid(Entry.Key.Get()) && IsValid(Entry.Key->GetPlayerState<ANBPlayerState>()),
@@ -167,7 +178,42 @@ void ANBGameMode::FinishRound(ENBRoundResult Result, ANBPlayerController* Winner
 		FinishedState.WinnerPlayerId = WinnerState->GetPlayerId();
 	}
 	NBState->SetRoundState(FinishedState);
-	// 결과는 유지한다. 결과 전용 위젯과 3초 후 재시작은 M6/M7에서 연결한다.
+	// 표시 시간은 서버가 결정한다. 예약 당시 라운드 ID도 함께 보관한다.
+	FTimerDelegate ResetDelegate;
+	ResetDelegate.BindUObject(this, &ANBGameMode::ResetGame, FinishedState.RoundId);
+	GetWorldTimerManager().SetTimer(ResetTimerHandle, ResetDelegate, 3.0f, false);
+}
+
+void ANBGameMode::ResetGame(int32 ExpectedRoundId)
+{
+	NB_RETURN_IF_FALSE(HasAuthority(), "Only the server can reset the game.");
+	ANBGameState* NBState = GetGameState<ANBGameState>();
+	NB_RETURN_IF_FALSE(IsValid(NBState), "NBGameState is missing.");
+	const FNBRoundState& Round = NBState->GetRoundState();
+	if (Round.RoundId != ExpectedRoundId || Round.Phase != ENBRoundPhase::ShowingResult)
+	{
+		return;
+	}
+	GetWorldTimerManager().ClearTimer(ResetTimerHandle);
+	NB_LOG("Resetting round=%d Players=%d", ExpectedRoundId, ChatPlayerNames.Num());
+	if (ChatPlayerNames.Num() == RequiredPlayers)
+	{
+		// ShowingResult의 입력 차단을 유지한 채 초기화하고 새 Playing을 공개한다.
+		StartRound();
+	}
+	else
+	{
+		SecretAnswer.Reset();
+		FNBRoundState WaitingState;
+		WaitingState.RoundId = ExpectedRoundId;
+		NBState->SetRoundState(WaitingState);
+	}
+}
+
+void ANBGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	GetWorldTimerManager().ClearTimer(ResetTimerHandle);
+	Super::EndPlay(EndPlayReason);
 }
 
 void ANBGameMode::ProcessChatMessage(ANBPlayerController* Sender, const FString& Message)

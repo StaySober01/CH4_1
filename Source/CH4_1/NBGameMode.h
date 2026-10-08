@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/GameModeBase.h"
 #include "NBGameTypes.h"
+#include "TimerManager.h"
 #include "NBGameMode.generated.h"
 
 class ANBPlayerController;
@@ -29,9 +30,13 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 private:
 	void TryStartRound();
+	void StartRound();
+	void ResetGame(int32 ExpectedRoundId);
+	FTimerHandle ResetTimerHandle;
 	void FinishRound(ENBRoundResult Result, ANBPlayerController* Winner = nullptr);
 	bool HaveAllPlayersExhaustedAttempts() const;
 	static constexpr int32 RequiredPlayers = 2;

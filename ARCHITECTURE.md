@@ -1,6 +1,6 @@
 # 숫자 야구 아키텍처
 
-갱신 기준: 2026-10-07. **현재 확인한 구현**과 **확정한 구현 계획**을 구분한다. M1 PIE 클래스 배치와 M2~M5는 사용자 검증 완료. M5 이탈·재접속은 별도 프로세스 실행 안내 후 사용자 완료 보고를 받았다. 개별 로그와 강제 이전 RoundId 제출 등 경계 테스트 결과는 별도 미수집이다. M6 결과 위젯도 사용자 검증 완료 보고를 받았다. 자동 재시작·턴은 미구현이다.
+갱신 기준: 2026-10-07. **현재 확인한 구현**과 **확정한 구현 계획**을 구분한다. M1 PIE 클래스 배치와 M2~M5는 사용자 검증 완료. M5 이탈·재접속은 별도 프로세스 실행 안내 후 사용자 완료 보고를 받았다. 개별 로그와 강제 이전 RoundId 제출 등 경계 테스트 결과는 별도 미수집이다. M6 결과 위젯도 사용자 검증 완료 보고를 받았다. M7 자동 재시작은 종료 크래시를 제외하고 사용자 기능 검증 완료. 종료 크래시는 원인 미확정·현재 미재현인 별도 이슈이며 턴은 미구현이다.
 
 ## 확정 요구사항 (2026-10-06 사용자 승인)
 
@@ -29,21 +29,21 @@
 | 항목 | 확인 결과 |
 | --- | --- |
 | 엔진/모듈 | CH4_1.uproject: EngineAssociation 5.6, Runtime 모듈 CH4_1 |
-| C++ | 기본 모듈에 LogNB 선언/정의 추가. NBGameMode/PlayerController/PlayerState/GameState 골격과 생성 로그 작성 |
+| C++ | GM 규칙/리셋, PC RPC/UI 연결, PS 횟수 복제, GS 라운드 복제, 규칙 라이브러리와 두 위젯 구현 |
 | 빌드 | CH4_1.Build.cs: Core, CoreUObject, Engine, InputCore, EnhancedInput, UMG, SlateCore |
 | 내부 include 경로 | PrivateIncludePaths에 ModuleDirectory 등록. UI 하위 폴더에서도 모듈 루트 기준 헤더 참조 |
 | Target | Game, Editor 두 Target. 별도 Server Target 없음 |
-| 콘텐츠 | 사용자 생성 L_NumberBaseball.umap, BP_NBGameMode.uasset, BP_NBPlayerController.uasset 확인 |
+| 콘텐츠 | L_NumberBaseball, BP_NBGameMode/PlayerController, WBP_NBChat/Result. 사용자 연결 검증 완료 보고 |
 | 시작 맵 | GameDefaultMap 및 EditorStartupMap이 /Game/Maps/L_NumberBaseball.L_NumberBaseball로 설정됨 |
 | 게임 클래스 설정 | GlobalDefaultGameMode에 BP_NBGameMode 설정. 사용자 PIE 로그로 클래스 적용 확인 |
-| 입력 | EnhancedInput 기본 클래스 설정. 게임 전용 입력 코드 없음 |
-| 문서 | README에 M1 구현 범위와 에디터 체크리스트 링크 추가 |
-| 환경 | 사용자 로그로 Listen Server + Client 실행 확인. 정식 빌드 결과 및 프로세스 설정은 별도 미확인 |
-| 저장소 | 분석 시작 시 git status --short 출력 없음 |
+| 입력 | UIOnly, 채팅/숫자 버튼 및 Enter 이벤트를 C++에서 연결. 별도 이동 조작 없음 |
+| 문서 | M8에서 README 실행법/현재 흐름/검증 한계와 통합 체크리스트 정리 |
+| 환경 | Listen Server + Client 단계별 사용자 확인. 별도 -game 프로세스 로그도 확인, Dedicated Server는 미검증 |
+| 저장소 | M8 시작 시 M7 코드/문서 변경이 남아 있음. 보존하고 문서만 갱신 |
 
 Saved/Intermediate/Binaries 등의 생성 폴더는 실행 성공의 증거로 사용하지 않는다. M2에서 PC Server/Client RPC와 GS NetMulticast, M3에서 숫자 제출 RPC를 추가했다. M4는 PS의 UsedAttempts/MaxAttempts를 복제한다. M5는 GS의 FNBRoundState를 복제하고 숫자 제출에 RoundId 검사를 추가한다. 턴 상태는 아직 없다.
 
-## 2. 최종 목표 클래스 구조 (현재 M6 결과 위젯 코드까지 작성)
+## 2. 최종 목표 클래스 구조 (현재 M7 자동 재시작 코드까지 작성)
 
 현재 공통 진단 도구는 `NBUtility.h`다. LogNB에 함수명/줄번호를 포함하는 로그와 조건 실패 시 조기 반환 매크로를 제공한다. 화면 출력은 기본적으로 꺼져 있다. 순수 C++ 헤더로 서버/클라이언트 호출 위치에서 실행하며, 네트워크 전송이나 게임 판정을 담당하지 않는다. 사용법은 `Docs/NB_UTILITY.md`에 기록했다.
 
@@ -65,6 +65,22 @@ Saved/Intermediate/Binaries 등의 생성 폴더는 실행 성공의 증거로 �
 에셋 제안: `Content/Maps/L_NumberBaseball.umap`, `Content/Blueprints/BP_NBGameMode.uasset`, `Content/Blueprints/BP_NBPlayerController.uasset`, `Content/UI/WBP_NBChat.uasset`, `Content/UI/WBP_NBResult.uasset`. Blueprint는 클래스 기본값 및 화면 배치에 사용하고 핵심 규칙은 C++에 둔다. 필요한 단계에서만 생성한다.
 
 ## 3. 데이터 소유와 수정 권한
+
+### M8 정적 통합 검토
+
+실제 GM 입력/시작/승패/리셋, PC RPC/UI 수명, PS/GS 복제와 호스트 알림, 두 위젯, 순수 규칙 및 테스트 코드를 대조했다. 이번 단계에서 코드 수정을 요구하는 문제는 발견하지 않았다. 코드 변경 없이 README에 실제 처리 흐름과 실행법을 정리했다. 정적 검토는 런타임 성공 증거가 아니며 최종 2인 통합 실행은 Docs/M8_INTEGRATION_CHECKLIST.md 안내 후 2026-10-08 사용자 완료 보고를 받았다.
+
+M2~M7의 사용자 확인과 M8 새 통합 실행을 구분한다. 강제 이전 ID 요청·지연 RPC·초기화 순서별 시험·Dedicated Server·패키징·외부 네트워크는 별도 실행 증거가 없다. 종료 크래시는 원인 미확정·현재 미재현 상태로 유지한다. 아래 단계별 설명에서 초기 구현의 제한은 역사적 기록이며 현재 구현은 M7 및 README를 우선한다.
+
+### M7 자동 재시작 (사용자 기능 검증 완료, 종료 크래시 제외)
+
+GM FinishRound는 결과 공개 후 서버 TimerManager에 3초 단발 타이머를 등록한다. UObject delegate에 예약 당시 RoundId를 바인딩한다. ResetGame은 서버 권한·동일 RoundId·ShowingResult를 검사하여 이전 예약이 다른 라운드를 초기화하지 못하게 한다. Logout/EndPlay와 새 라운드 시작에서 타이머를 해제한다.
+
+TryStartRound는 최초/재접속의 Waiting 및 2인 조건을 확인하며 실제 초기화는 StartRound로 분리했다. ResetGame도 2인일 때 이 함수를 호출한다. 횟수 0 → 정답 생성 → 새 RoundId와 Playing 공개 순서이고 결과 필드는 새 FNBRoundState의 기본값으로 비운다. 결과 후 재시작 중 불필요한 Waiting을 공개하지 않는다. 참가자가 부족하면 Waiting으로 전환한다.
+
+PC는 RoundId가 바뀌면 숫자 입력창을 비운다. 결과 공지 숨김과 입력 활성화는 기존 GS/PS 복제 경로를 그대로 사용한다. 위젯을 재생성하거나 맵을 재로드하지 않는다. 채팅 이력과 입력 중 채팅은 유지한다. 다른 Actor 사이의 복제 도착 순서는 보장하지 않는다.
+
+3초는 서버 결과 확정 시점 기준 게임 시간이다. 클라이언트 수신 확인이나 화면마다 정확한 3초 보장을 추가하지 않는다. 아래 M5/M6의 결과 유지 설명은 당시 단계 기록이며 현재 동작은 이 M7 설명을 따른다.
 
 ### M6 결과 공지 UI
 

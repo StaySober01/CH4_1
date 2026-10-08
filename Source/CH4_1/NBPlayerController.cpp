@@ -141,6 +141,10 @@ void ANBPlayerController::RefreshRoundUI()
 		return;
 	}
 	const FNBRoundState& Round = NBState->GetRoundState();
+	if (LastDisplayedRoundId != Round.RoundId)
+	{
+		ChatWidget->ClearGuessInput();
+	}
 	ChatWidget->SetRoundPlaying(Round.Phase == ENBRoundPhase::Playing);
 	// 초기 조회와 BeginPlay/OnRep 알림이 겹쳐도 같은 상태 문구를 반복하지 않는다.
 	if (LastDisplayedRoundId == Round.RoundId && LastDisplayedPhase == Round.Phase)

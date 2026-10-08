@@ -121,6 +121,12 @@ void UNBChatWidget::SetRoundPlaying(bool bPlaying)
 	RefreshGuessEnabled();
 }
 
+void UNBChatWidget::ClearGuessInput()
+{
+	NB_RETURN_IF_FALSE(GuessInput, "Guess input is missing.");
+	GuessInput->SetText(FText::GetEmpty());
+}
+
 void UNBChatWidget::RefreshGuessEnabled()
 {
 	NB_RETURN_IF_FALSE(GuessInput && GuessButton, "Guess widgets are missing.");
